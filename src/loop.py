@@ -6,15 +6,17 @@ from openrouter import chat
 from tools.read_file import read_file, READ_FILE_SCHEMA
 from tools.list_directories import list_directories, LIST_DIRECTORIES_SCHEMA
 from tools.write_file import write_file, WRITE_FILE_SCHEMA
+from tools.run_bash import run_bash, RUN_BASH_SCHEMA
 
 MODEL = "google/gemini-2.5-flash"
 TOOLS = [
     READ_FILE_SCHEMA, 
     WRITE_FILE_SCHEMA, 
-    LIST_DIRECTORIES_SCHEMA
+    LIST_DIRECTORIES_SCHEMA,
+    RUN_BASH_SCHEMA
 ]
 
-DESTRUCTIVE_TOOLS = ["write_file"]
+DESTRUCTIVE_TOOLS = ["write_file", "run_bash"]
 ALWAYS_ALLOWED = []
 
 # stores conversation history per session
@@ -23,7 +25,11 @@ context = []
 
 def run_tool(call):
     name = call["function"]["name"]
-    arguments = json.loads(call["function"]["arguments"])
+
+    try:
+        arguments = json.loads(call["function"]["arguments"])
+    except json.JSONDecodeError as e:
+        return f"Error: malformed arguments for '{name}' : {e}"
 
     if name in DESTRUCTIVE_TOOLS and name not in ALWAYS_ALLOWED:
         decision = request_permission(name, arguments)
@@ -58,23 +64,30 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
 
     if name == "write_file":
         print(f"  path: {arguments.get("path")}")
-        print(f"  content: {arguments.get("content")}")
+        # print(f"  content: {arguments.get("content")}")
     elif name=="run_bash":
         print(f"  command: {arguments.get("command")}")
     else:
         print(f"  arguments: {arguments}")
 
+
+    allow_always = name != "run_bash"
+
     print(f"\n [1] allow once")
-    print(f"\n [2] always allow")
-    print(f"\n [3] deny")
+
+    if allow_always:
+        print(f"\n [2] always allow")
+        print(f"\n [3] deny")
+    else:
+        print(f"\n [2] deny")
 
     choice = input("> ").strip()
 
     if choice == "1":
         return "yes"
-    elif choice == "2":
+    elif allow_always and choice == "2":
         return "always"
-    elif choice == "3":
+    elif (allow_always and choice == "3") or (not allow_always and choice == "2"):
         return "no"
     else:
         print("Invalid choice, denying by default.")
