@@ -55,6 +55,9 @@ def run_tool(call):
         print(f"Listing {arguments["dir_path"]}...")
         return list_directories(arguments["dir_path"])
     
+    if name == "run_bash":
+        print(f"Executing command:  {arguments["command"]}")
+        return run_bash(arguments["command"])
 
     return f"Error: unknown tool '{name}'"
 

@@ -3,8 +3,11 @@ import httpx
 from exceptions import AuthError, NetworkError, NoCreditsError
 
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
+ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
 
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 
