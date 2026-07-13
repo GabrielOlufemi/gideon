@@ -8,6 +8,13 @@ from tools.list_directories import list_directories, LIST_DIRECTORIES_SCHEMA
 from tools.write_file import write_file, WRITE_FILE_SCHEMA
 from tools.run_bash import run_bash, RUN_BASH_SCHEMA
 
+
+# color config imports 
+from display import (
+    print_error, print_reply, print_tool, print_permission,print_user
+)
+
+
 MODEL = "google/gemini-2.5-flash"
 TOOLS = [
     READ_FILE_SCHEMA, 
@@ -42,47 +49,46 @@ def run_tool(call):
 
 
     if name == "read_file":
-        print(f"Reading {arguments["path"]}...")
+        # tool call print
+        print_tool(f"Reading {arguments["path"]}...")
         return read_file(arguments["path"])
 
 
     if name == "write_file":
-        print(f"Writing to {arguments["path"]}...")
+        # tool call print
+        print_tool(f"Writing to {arguments["path"]}...")
         return write_file(arguments["path"], arguments["content"])
 
 
     if name == "list_directories":
-        print(f"Listing {arguments["dir_path"]}...")
+        # tool call print
+        print_tool(f"Listing {arguments["dir_path"]}...")
         return list_directories(arguments["dir_path"])
     
     if name == "run_bash":
-        print(f"Executing command:  {arguments["command"]}")
+        print_tool(f"Executing command:  {arguments["command"]}")
         return run_bash(arguments["command"])
 
     return f"Error: unknown tool '{name}'"
 
 
 def request_permission(name: str, arguments: dict[str, str]) -> str:
-    print(f"\n Eureka wants to run the following '{name}' with the following: ")
 
     if name == "write_file":
-        print(f"  path: {arguments.get("path")}")
-        # print(f"  content: {arguments.get("content")}")
-    elif name=="run_bash":
-        print(f"  command: {arguments.get("command")}")
+        details = f"path: {arguments.get('path')}"
+    elif name == "run_bash":
+        details = f"command: {arguments.get('command')}"
     else:
-        print(f"  arguments: {arguments}")
-
+        details = f"arguments: {arguments}"
 
     allow_always = name != "run_bash"
 
-    print(f"\n [1] allow once")
-
     if allow_always:
-        print(f"\n [2] always allow")
-        print(f"\n [3] deny")
+        options = "[1] allow once\n[2] always allow\n[3] deny"
     else:
-        print(f"\n [2] deny")
+        options = "[1] allow once\n[2] deny"
+
+    print_permission(name, details, options)
 
     choice = input("> ").strip()
 
@@ -93,13 +99,15 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
     elif (allow_always and choice == "3") or (not allow_always and choice == "2"):
         return "no"
     else:
-        print("Invalid choice, denying by default.")
+        # error print
+        print_error("Invalid choice, denying by default.")
         return "no"
 
 
 while True:
 
     user_input = input("> ")
+    print_user(user_input)
 
     # check if input is exit
     if user_input.strip().lower() == "exit":
@@ -107,7 +115,8 @@ while True:
 
     # check if input is empty
     if user_input.strip().lower() == "":
-        print ("Type in something big dawg")
+        # error print
+        print_error("Type in something big dawg")
         continue
 
     context.append({
@@ -126,7 +135,8 @@ while True:
                 for call in message["tool_calls"]:
 
                     result = run_tool(call)
-                    print(f"Done.")
+                    # default text print
+                    print_tool(f"Done.")
 
                     context.append({
                         "role" : "tool",
@@ -146,9 +156,11 @@ while True:
    
    
     except Exception as e:
-        print(f"Error: {e}")
+        # error print
+        print_error(f"Error: {e}")
         if (context[-1]["role"]) != "tool":
             context.pop()
         continue
-
-    print(f"\n{reply_text}")
+    
+    # default response print
+    print_reply(f"\n{reply_text}")
