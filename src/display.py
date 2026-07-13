@@ -13,14 +13,14 @@ COLORS = {
 console = Console()
 
 def print_user(message: str) -> None:
-    console.print(message, style=COLORS["user_input"])
-
+    print("\033[F\033[K", end="")
+    console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
+       
 def print_tool(message: str) -> None:
     console.print(message, style=COLORS["tool_detail"])
 
 def print_reply(message: str) -> None:
-    for line in message.splitlines():
-            console.print(f"[{COLORS['accent']}]│[/{COLORS['accent']}] {line}")
+    console.print(message, style=COLORS["reply"])
 
 def print_error(message: str) -> None:
     console.print(message, style=COLORS["error"])
@@ -29,5 +29,6 @@ def print_permission(name: str, details: str, options: str) -> None:
     console.print(Panel(
         f"{details}\n\n{options}",
         title=f"Eureka wants to run '{name}'",
-        border_style=COLORS['accent']
+        border_style=COLORS['accent'],
+        expand=True
     ))

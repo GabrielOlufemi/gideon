@@ -26,10 +26,13 @@ TOOLS = [
 DESTRUCTIVE_TOOLS = ["write_file", "run_bash"]
 ALWAYS_ALLOWED = []
 
+# terminate words
+TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
+
 # stores conversation history per session
 context = []
 
-
+# tool exec logic
 def run_tool(call):
     name = call["function"]["name"]
 
@@ -55,13 +58,11 @@ def run_tool(call):
 
 
     if name == "write_file":
-        # tool call print
         print_tool(f"Writing to {arguments["path"]}...")
         return write_file(arguments["path"], arguments["content"])
 
 
     if name == "list_directories":
-        # tool call print
         print_tool(f"Listing {arguments["dir_path"]}...")
         return list_directories(arguments["dir_path"])
     
@@ -72,6 +73,7 @@ def run_tool(call):
     return f"Error: unknown tool '{name}'"
 
 
+# permission request logic
 def request_permission(name: str, arguments: dict[str, str]) -> str:
 
     if name == "write_file":
@@ -109,8 +111,8 @@ while True:
     user_input = input("> ")
     print_user(user_input)
 
-    # check if input is exit
-    if user_input.strip().lower() == "exit":
+    # check if input attempts termiante
+    if user_input.strip().lower() in TERMINATE_KEYWORDS:
         break
 
     # check if input is empty
@@ -119,10 +121,11 @@ while True:
         print_error("Type in something big dawg")
         continue
 
+    # add to context
     context.append({
         "role":"user", "content":user_input
     })
-    
+
     try:
         
         while True:
@@ -132,17 +135,39 @@ while True:
             if message.get("tool_calls"):
                 context.append(message)
 
-                for call in message["tool_calls"]:
+                # set of ids model promises to call for this turn
+                tool_call_ids = {call["id"] for call in message["tool_calls"]}
 
-                    result = run_tool(call)
-                    # default text print
-                    print_tool(f"Done.")
+                # set of ids actually called + successfully executed
+                answered_ids = set()
 
-                    context.append({
-                        "role" : "tool",
-                        "tool_call_id" : call["id"],
-                        "content" : result
-                    })
+                try:
+                    for call in message["tool_calls"]:
+                        
+                        result = run_tool(call)
+
+                        # tool call completion
+                        print_tool(f"Done.")
+
+                        context.append({
+                            "role" : "tool",
+                            "tool_call_id" : call["id"],
+                            "content" : result
+                        })
+
+                        answered_ids.add(call["id"])
+                except Exception as e:
+                
+                    #missing tool calls that never got a corresponding tool response
+                    missing_ids = tool_call_ids - answered_ids
+
+                    for missing_id in missing_ids:
+                        context.append({
+                            "role" : "tool",
+                            "tool_call_id" : missing_id,
+                            "content" : f"Error: {e}"
+                        })
+
 
                 continue
 
@@ -158,8 +183,6 @@ while True:
     except Exception as e:
         # error print
         print_error(f"Error: {e}")
-        if (context[-1]["role"]) != "tool":
-            context.pop()
         continue
     
     # default response print
