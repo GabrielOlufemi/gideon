@@ -29,6 +29,7 @@ def list_sessions(session_dir: Path) -> list[dict]:
     return sessions
 
 
+
 def get_session_dir(cwd: str) -> Path:
 
     # - hash cwd with sha256, truncate to 12 hex chars
@@ -38,9 +39,10 @@ def get_session_dir(cwd: str) -> Path:
 
     cwd_hash = hashlib.sha256(cwd.encode()).hexdigest()[:12]
 
-    project_name = Path(cwd).stem
+    project_name = Path(cwd).name
 
     session_dir = SESSIONS_ROOT / f"{cwd_hash}_{project_name}"
+    # looks something like this /home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project
 
     try:
         session_dir.mkdir(parents=True, exist_ok=True)
@@ -49,3 +51,41 @@ def get_session_dir(cwd: str) -> Path:
 
     return session_dir
 
+
+
+def new_session_path(session_dir: Path) -> Path:
+
+    timestamp = datetime.now().strftime(f"%Y-%m-%d_%H-%M-%S")
+
+    return session_dir / f"session_{timestamp}.json"
+
+
+
+def save_session(path: Path, context: list[dict]) -> None:
+
+    try:
+        with open(path, "w") as f:
+            json.dump(context, f)
+
+    except OSError as e:
+        raise RuntimeError(f"Could not write session file {path}: {e}") from e
+
+
+
+def load_session(path: Path) -> list[dict]:
+
+    # - open path, json.load, return it
+    # - what happens if the file is corrupted / not valid JSON?
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except json.JSONDecodeError as e:
+        raise RuntimeError(f"Session file {path} is corrupted: {e}") from e
+    except OSError as e:
+        raise RuntimeError(f"Could not read session file {path}: {e}") from e
+    
+    if not isinstance(data, list):
+        # checks if data arrives/matches list
+        raise RuntimeError(f"Session file {path} does not contain a valid session list")
+
+    return data
