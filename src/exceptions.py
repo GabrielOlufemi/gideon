@@ -7,3 +7,5 @@ class NoCreditsError(Exception):
 class NetworkError(Exception):
     pass
 
+class PickerCancelled(Exception):
+    pass

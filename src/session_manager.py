@@ -26,6 +26,20 @@ def list_sessions(session_dir: Path) -> list[dict]:
 
     sessions.sort(key=lambda s: s["path"].stem, reverse=True)
 
+
+    # sessions looks something like this :
+    # [
+    #     {
+    #         "path": PosixPath("/home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project/session_2026-07-14_09-15-42.json"),
+    #         "display": "Jul 14, 9:15AM"
+    #     },
+    #     {
+    #         "path": PosixPath("/home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project/session_2026-07-12_14-30-05.json"),
+    #         "display": "Jul 12, 2:30PM"
+    #     }
+    # ]
+
+    
     return sessions
 
 

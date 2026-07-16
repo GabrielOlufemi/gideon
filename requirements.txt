@@ -6,7 +6,10 @@ httpx==0.28.1
 idna==3.18
 markdown-it-py==4.2.0
 mdurl==0.1.2
+prompt_toolkit==3.0.52
 Pygments==2.20.0
 python-dotenv==1.2.2
+questionary==2.1.1
 rich==15.0.0
 typing_extensions==4.15.0
+wcwidth==0.8.2
