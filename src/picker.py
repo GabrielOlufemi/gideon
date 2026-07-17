@@ -6,7 +6,12 @@ from exceptions import PickerCancelled
 
 from session_manager import list_sessions, new_session_path
 
-
+# styling p
+custom_style = questionary.Style([
+    ('qmark', 'fg:#FF8700 bold'),
+    ('pointer', 'fg:#FF8700 bold'),
+    ('highlighted', 'fg:#FF8700'),
+])
 
 # session picker
 def pick_session(session_dir: Path) -> Path:
@@ -17,18 +22,18 @@ def pick_session(session_dir: Path) -> Path:
     
     choices = [
         questionary.Choice(
-            title="New session",
+            title="1. New session",
             value=new_session_path(session_dir)
         )
     ]
 
     choices += [
         questionary.Choice(
-            title=session["display"],
+            title=f"{i}. {session["display"]}",
             value=session["path"]
         )
 
-        for session in sessions
+        for i, session in enumerate(sessions, start=2)
     ]
 
     # result is already a Path at this point, whichever option got picked
@@ -41,7 +46,13 @@ def pick_session(session_dir: Path) -> Path:
 
 def select_choice(message: str, choices: list[questionary.Choice]):
 
-    result = questionary.select(message, choices=choices.ask())
+    result = questionary.select(
+        message, 
+        choices=choices,
+        style=custom_style,
+        pointer="❯",
+        qmark=""
+    ).ask()
 
     if result is None:
         raise PickerCancelled("Selection cancelled by user")
