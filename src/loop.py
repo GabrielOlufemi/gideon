@@ -1,6 +1,10 @@
 import json
 from openrouter import chat
 
+# scaffolding stuff
+from pathlib import Path
+from session_manager import save_session
+
 
 # tool imports
 from tools.read_file import read_file, READ_FILE_SCHEMA
@@ -30,7 +34,7 @@ ALWAYS_ALLOWED = []
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
 
 # stores conversation history per session
-context = []
+# context = []
 
 # tool exec logic
 def run_tool(call):
@@ -106,84 +110,89 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         return "no"
 
 
-while True:
+def run_loop(context: list[dict], session_path: Path) -> None:
+    while True:
 
-    user_input = input("> ")
-    print_user(user_input)
+        user_input = input("> ")
+        print_user(user_input)
 
-    # check if input attempts termiante
-    if user_input.strip().lower() in TERMINATE_KEYWORDS:
-        break
-
-    # check if input is empty
-    if user_input.strip().lower() == "":
-        # error print
-        print_error("Type in something big dawg")
-        continue
-
-    # add to context
-    context.append({
-        "role":"user", "content":user_input
-    })
-
-    try:
-        
-        while True:
-            response = chat(context, MODEL, TOOLS)
-            message = response["choices"][0]["message"]
-
-            if message.get("tool_calls"):
-                context.append(message)
-
-                # set of ids model promises to call for this turn
-                tool_call_ids = {call["id"] for call in message["tool_calls"]}
-
-                # set of ids actually called + successfully executed
-                answered_ids = set()
-
-                try:
-                    for call in message["tool_calls"]:
-                        
-                        result = run_tool(call)
-
-                        # tool call completion
-                        print_tool(f"Done.")
-
-                        context.append({
-                            "role" : "tool",
-                            "tool_call_id" : call["id"],
-                            "content" : result
-                        })
-
-                        answered_ids.add(call["id"])
-                except Exception as e:
-                
-                    #missing tool calls that never got a corresponding tool response
-                    missing_ids = tool_call_ids - answered_ids
-
-                    for missing_id in missing_ids:
-                        context.append({
-                            "role" : "tool",
-                            "tool_call_id" : missing_id,
-                            "content" : f"Error: {e}"
-                        })
-
-
-                continue
-
-            reply_text = message["content"]
-
-            context.append({
-                "role":"assistant", "content":reply_text
-            })
-
+        # check if input attempts termiante
+        if user_input.strip().lower() in TERMINATE_KEYWORDS:
             break
-   
-   
-    except Exception as e:
-        # error print
-        print_error(f"Error: {e}")
-        continue
+
+        # check if input is empty
+        if user_input.strip().lower() == "":
+            # error print
+            print_error("Type in something big dawg")
+            continue
+
+        # start of a turn
+        # add to context
+        context.append({
+            "role":"user", "content":user_input
+        })
+
+        try:
+            
+            while True:
+                response = chat(context, MODEL, TOOLS)
+                message = response["choices"][0]["message"]
+
+                if message.get("tool_calls"):
+                    context.append(message)
+
+                    # set of ids model promises to call for this turn
+                    tool_call_ids = {call["id"] for call in message["tool_calls"]}
+
+                    # set of ids actually called + successfully executed
+                    answered_ids = set()
+
+                    try:
+                        for call in message["tool_calls"]:
+                            
+                            result = run_tool(call)
+
+                            # tool call completion
+                            print_tool(f"Done.")
+
+                            context.append({
+                                "role" : "tool",
+                                "tool_call_id" : call["id"],
+                                "content" : result
+                            })
+
+                            answered_ids.add(call["id"])
+                    except Exception as e:
+                    
+                        #missing tool calls that never got a corresponding tool response
+                        missing_ids = tool_call_ids - answered_ids
+
+                        for missing_id in missing_ids:
+                            context.append({
+                                "role" : "tool",
+                                "tool_call_id" : missing_id,
+                                "content" : f"Error: {e}"
+                            })
+
+
+                    continue
+
+                reply_text = message["content"]
+
+                context.append({
+                    "role":"assistant", "content":reply_text
+                })
+
+                # saving turn to session log
+                save_session(session_path, context)
+
+                break
     
-    # default response print
-    print_reply(f"\n{reply_text}")
+    
+        except Exception as e:
+            # error print
+            print_error(f"Error: {e}")
+            continue
+        
+        # default response print
+        print_reply(f"\n{reply_text}")
