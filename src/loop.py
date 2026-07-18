@@ -9,6 +9,9 @@ from session_manager import save_session
 from display import (
     print_error, print_reply, print_tool, print_permission,print_user
 )
+from picker import select_choice
+from exceptions import PickerCancelled
+import questionary
 
 # tool + model related stuff
 from tools.read_file import read_file
@@ -70,6 +73,7 @@ def run_tool(call):
 # permission request logic
 def request_permission(name: str, arguments: dict[str, str]) -> str:
 
+    # individual check for existing tools
     if name == "write_file":
         details = f"path: {arguments.get('path')}"
     elif name == "run_bash":
@@ -80,25 +84,24 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
     allow_always = name != "run_bash"
 
     if allow_always:
-        options = "[1] allow once\n[2] always allow\n[3] deny"
+        choices = [
+            questionary.Choice(title="Allow once", value="yes"),
+            questionary.Choice(title="Always allow", value="always"),
+            questionary.Choice(title="Deny", value="no"),
+        ]
     else:
-        options = "[1] allow once\n[2] deny"
+        choices = [
+            questionary.Choice(title="Allow once", value="yes"),
+            questionary.Choice(title="Deny", value="no"),
+        ]
 
-    print_permission(name, details, options)
+    print_permission(name, details)
 
-    choice = input("> ").strip()
-
-    if choice == "1":
-        return "yes"
-    elif allow_always and choice == "2":
-        return "always"
-    elif (allow_always and choice == "3") or (not allow_always and choice == "2"):
+    try:
+        return select_choice("Choose an action:", choices)
+    except PickerCancelled:
+        print_error("Cancelled, denying by default")
         return "no"
-    else:
-        # error print
-        print_error("Invalid choice, denying by default.")
-        return "no"
-
 
 def run_loop(context: list[dict], session_path: Path) -> None:
     while True:

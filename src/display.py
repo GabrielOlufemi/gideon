@@ -29,9 +29,9 @@ def print_reply(message: str) -> None:
 def print_error(message: str) -> None:
     console.print(message, style=COLORS["error"])
 
-def print_permission(name: str, details: str, options: str) -> None:
+def print_permission(name: str, details: str) -> None:
     console.print(Panel(
-        f"{details}\n\n{options}",
+        details,
         title=f"{AGENT_NAME} wants to run '{name}'",
         border_style=COLORS['accent'],
         expand=True

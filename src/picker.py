@@ -2,8 +2,9 @@
 from pathlib import Path
 import questionary
 
-from exceptions import PickerCancelled
 
+from exceptions import PickerCancelled
+from typing import Any
 from session_manager import list_sessions, new_session_path
 
 # styling p
@@ -44,7 +45,7 @@ def pick_session(session_dir: Path) -> Path:
     return result
     
 
-def select_choice(message: str, choices: list[questionary.Choice]):
+def select_choice(message: str, choices: list[questionary.Choice]) -> Any:
 
     result = questionary.select(
         message, 
