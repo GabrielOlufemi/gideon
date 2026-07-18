@@ -40,7 +40,7 @@ def pick_session(session_dir: Path) -> Path:
 
     # result is already a Path at this point, whichever option got picked
     # looks someething like this 
-    # PosixPath('/home/gabriel/.eureka/sessions/bd58ed479e5c_test_project/session_2026-07-16_15-42-10.json')
+    # PosixPath('/home/gabriel/.gideon/sessions/bd58ed479e5c_test_project/session_2026-07-16_15-42-10.json')
     result = select_choice("Select a session:", choices)
 
     return result

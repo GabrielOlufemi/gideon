@@ -2,12 +2,12 @@ import json
 from pathlib import Path
 
 
-CONFIG_DIR = Path.home() / ".eureka"
+CONFIG_DIR = Path.home() / ".gideon"
 CONFIG_PATH= CONFIG_DIR / "config.json"
 
 DEFAULTS = {
 
-    "agent_name" : "Eureka"
+    "agent_name" : "Gideon"
 
 }
 

@@ -5,7 +5,7 @@ from datetime import datetime
 
 from config import CONFIG_DIR
 
-# does something like: home/gabriel/.eureka/sessions
+# does something like: home/gabriel/.gideon/sessions
 SESSIONS_ROOT = CONFIG_DIR / "sessions"
 
 def list_sessions(session_dir: Path) -> list[dict]: 
@@ -32,11 +32,11 @@ def list_sessions(session_dir: Path) -> list[dict]:
     # sessions looks something like this :
     # [
     #     {
-    #         "path": PosixPath("/home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project/session_2026-07-14_09-15-42.json"),
+    #         "path": PosixPath("/home/gabriel/.gideon/sessions/a3f9c21e8b4d_test_project/session_2026-07-14_09-15-42.json"),
     #         "display": "Jul 14, 9:15AM"
     #     },
     #     {
-    #         "path": PosixPath("/home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project/session_2026-07-12_14-30-05.json"),
+    #         "path": PosixPath("/home/gabriel/.gideon/sessions/a3f9c21e8b4d_test_project/session_2026-07-12_14-30-05.json"),
     #         "display": "Jul 12, 2:30PM"
     #     }
     # ]
@@ -58,7 +58,7 @@ def get_session_dir(cwd: str) -> Path:
     project_name = Path(cwd).name
 
     session_dir = SESSIONS_ROOT / f"{cwd_hash}_{project_name}"
-    # looks something like this /home/gabriel/.eureka/sessions/a3f9c21e8b4d_test_project
+    # looks something like this /home/gabriel/.gideon/sessions/a3f9c21e8b4d_test_project
 
     try:
         session_dir.mkdir(parents=True, exist_ok=True)

@@ -42,7 +42,6 @@ def print_tool(message: str) -> None:
 
 
 def print_reply(message: str) -> None:
-    console.print()
     console.print(Padding(
         Panel(
             Markdown(message),
