@@ -5,7 +5,7 @@ from picker import pick_session
 from exceptions import PickerCancelled
 
 from loop import run_loop
-
+from system_prompt import build_system_prompt
 
 def main() -> None:
     cwd = Path.cwd()
@@ -23,6 +23,10 @@ def main() -> None:
     else:
         context = []
 
+    # retrieving system prompt
+    system_promot = build_system_prompt()
+
+    # loop exec
     run_loop(context, session_path)
     
 if __name__ == "__main__":
