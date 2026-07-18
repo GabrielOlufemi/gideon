@@ -3,13 +3,10 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-import os 
-from dotenv import load_dotenv
+from config import CONFIG_DIR
 
-SESSIONS_ROOT = Path.home() / f".{os.getenv("AGENT_NAME")}" / "sessions"
-
-
-# e.g. does something like: home/gabriel/.eureka/sessions
+# does something like: home/gabriel/.eureka/sessions
+SESSIONS_ROOT = CONFIG_DIR / "sessions"
 
 def list_sessions(session_dir: Path) -> list[dict]: 
 

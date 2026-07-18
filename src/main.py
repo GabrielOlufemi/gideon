@@ -5,7 +5,15 @@ from picker import pick_session
 from exceptions import PickerCancelled
 
 from loop import run_loop
+
+# prompt import
 from system_prompt import build_system_prompt
+
+# config.py import
+from config import get_agent_name
+
+# tool related imports
+from tools_config import TOOLS, DESTRUCTIVE_TOOLS
 
 def main() -> None:
     cwd = Path.cwd()
@@ -22,9 +30,10 @@ def main() -> None:
         context = load_session(session_path)
     else:
         context = []
+        # retrieving system prompt
+        system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
+        context.append({"role": "system", "content": system_prompt})
 
-    # retrieving system prompt
-    system_promot = build_system_prompt()
 
     # loop exec
     run_loop(context, session_path)

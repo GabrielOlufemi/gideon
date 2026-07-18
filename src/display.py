@@ -2,11 +2,9 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.markdown import Markdown
 
+from config import get_agent_name
 
-import os 
-from dotenv import load_dotenv
-
-AGENT_NAME = os.getenv("AGENT_NAME")
+AGENT_NAME = get_agent_name()
 
 COLORS = {
     "user_input" : "on grey19",
