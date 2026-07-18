@@ -188,4 +188,4 @@ def run_loop(context: list[dict], session_path: Path) -> None:
             continue
         
         # default response print
-        print_reply(f"\n{reply_text}")
+        print_reply(f"{reply_text}")

@@ -9,9 +9,10 @@ from session_manager import list_sessions, new_session_path
 
 # styling p
 custom_style = questionary.Style([
-    ('qmark', 'fg:#FF8700 bold'),
-    ('pointer', 'fg:#FF8700 bold'),
-    ('highlighted', 'fg:#FF8700'),
+    ('qmark', 'fg:#55821A bold'),
+    ('pointer', 'fg:#55821A bold'),
+    ('highlighted', 'fg:#55821A bold'),
+    ('answer', 'fg:#55821A bold'),
 ])
 
 # session picker
