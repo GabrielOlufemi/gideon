@@ -21,7 +21,7 @@ def print_user(message: str) -> None:
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
        
 def print_tool(message: str) -> None:
-    console.print(message, style=COLORS["tool_detail"])
+    console.print(f"   {message}", style=COLORS["tool_detail"])
 
 def print_reply(message: str) -> None:
     console.print(Markdown(message), style=COLORS["reply"])
