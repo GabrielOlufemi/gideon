@@ -1,6 +1,12 @@
 from rich.console import Console
 from rich.panel import Panel
+from rich.markdown import Markdown
 
+
+import os 
+from dotenv import load_dotenv
+
+AGENT_NAME = os.getenv("AGENT_NAME")
 
 COLORS = {
     "user_input" : "on grey19",
@@ -20,7 +26,7 @@ def print_tool(message: str) -> None:
     console.print(message, style=COLORS["tool_detail"])
 
 def print_reply(message: str) -> None:
-    console.print(message, style=COLORS["reply"])
+    console.print(Markdown(message), style=COLORS["reply"])
 
 def print_error(message: str) -> None:
     console.print(message, style=COLORS["error"])
@@ -28,7 +34,7 @@ def print_error(message: str) -> None:
 def print_permission(name: str, details: str, options: str) -> None:
     console.print(Panel(
         f"{details}\n\n{options}",
-        title=f"Eureka wants to run '{name}'",
+        title=f"{AGENT_NAME} wants to run '{name}'",
         border_style=COLORS['accent'],
         expand=True
     ))

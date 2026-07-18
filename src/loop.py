@@ -5,36 +5,26 @@ from openrouter import chat
 from pathlib import Path
 from session_manager import save_session
 
-
-# tool imports
-from tools.read_file import read_file, READ_FILE_SCHEMA
-from tools.list_directories import list_directories, LIST_DIRECTORIES_SCHEMA
-from tools.write_file import write_file, WRITE_FILE_SCHEMA
-from tools.run_bash import run_bash, RUN_BASH_SCHEMA
-
-
 # color config imports 
 from display import (
     print_error, print_reply, print_tool, print_permission,print_user
 )
 
+# tool + model related stuff
+from tools.read_file import read_file
+from tools.write_file import write_file
+from tools.list_directories import list_directories
+from tools.run_bash import run_bash
 
-MODEL = "google/gemini-2.5-flash"
-TOOLS = [
-    READ_FILE_SCHEMA, 
-    WRITE_FILE_SCHEMA, 
-    LIST_DIRECTORIES_SCHEMA,
-    RUN_BASH_SCHEMA
-]
+from tools_config import MODEL, TOOLS, DESTRUCTIVE_TOOLS
 
-DESTRUCTIVE_TOOLS = ["write_file", "run_bash"]
 ALWAYS_ALLOWED = []
 
 # terminate words
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
 
 # stores conversation history per session
-# context = []
+# context = [] -> moved ts to main.py
 
 # tool exec logic
 def run_tool(call):
