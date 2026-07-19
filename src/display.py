@@ -4,6 +4,7 @@ from rich.box import Box
 from rich.padding import Padding
 from rich.markdown import Markdown
 from rich.table import Table
+from rich.rule import Rule
 from rich import box
 
 from config import get_agent_name
@@ -39,6 +40,12 @@ console = Console()
 def print_user(message: str) -> None:
     print("\033[F\033[K", end="")
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
+    console.print(Rule(style="dim"))
+    console.print("   / for shortcuts [haven't done this yet]", style=COLORS["tool_detail"])
+
+
+def print_top_rule() -> None:
+    console.print(Rule(style="dim"))
 
 def print_tool(message: str) -> None:
     console.print(f"   {message}", style=COLORS["tool_detail"])
@@ -90,9 +97,9 @@ def print_welcome(cwd: str) -> None:
         "[bold]Setup[/bold]\n"
         "1. Choose a model\n"
         "2. Add your OpenRouter key\n"
-        "[bold]Who is Gideon?[/bold] Hey, I'm Gideon, gabriel's alter ego (sort of) and "
+        "[bold]Who is Gideon?[/bold] \nHey, I'm Gideon, gabriel's alter ego (sort of) and "
         "your terminal coding agent. Point me at a problem and I'll get "
-        "poke through your code, run commands and doing the heavy lifting while you sit back and relax."
+        "poke through your codebase, run commands and doing the heavy lifting while you sit back and relax."
         " I'll just check with you first before doing anything permanent."
     )
 

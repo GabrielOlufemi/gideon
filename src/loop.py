@@ -7,7 +7,9 @@ from session_manager import save_session
 
 # color config imports 
 from display import (
-    print_error, print_reply, print_tool, print_permission,print_user
+    print_error, print_reply, 
+    print_tool, print_permission,print_user,
+    print_top_rule
 )
 from picker import select_choice
 from exceptions import PickerCancelled
@@ -107,6 +109,7 @@ def run_loop(context: list[dict], session_path: Path) -> None:
 
     while True:
 
+        print_top_rule()
         user_input = input("> ")
         print_user(user_input)
 
