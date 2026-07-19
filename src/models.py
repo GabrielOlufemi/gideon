@@ -1,8 +1,10 @@
 # src/models.py
 
-from openrouter import fetch_models
+import questionary
 
-# models i think are good 
+from openrouter import fetch_models
+from picker import select_choice
+
 RECOMMENDED_MODELS = [
     {"id": "anthropic/claude-opus-4.8",  "label": "Claude Opus 4.8",  "provider": "Anthropic"},
     {"id": "anthropic/claude-sonnet-5",  "label": "Claude Sonnet 5",  "provider": "Anthropic"},
@@ -22,11 +24,45 @@ RECOMMENDED_MODELS = [
 
 def fetch_all_models() -> list[dict]:
     raw_models = fetch_models()
+    recommended_ids = {m["id"] for m in RECOMMENDED_MODELS}
 
     usable = [
         m for m in raw_models
         if "text" in m.get("architecture", {}).get("input_modalities", [])
         and "text" in m.get("architecture", {}).get("output_modalities", [])
+        and m.get("id") not in recommended_ids
     ]
 
     return usable
+
+
+def pick_model() -> str:
+    choices = []
+    seen_providers = []
+    grouped = {}
+    for m in RECOMMENDED_MODELS:
+        if m["provider"] not in grouped:
+            grouped[m["provider"]] = []
+            seen_providers.append(m["provider"])
+        grouped[m["provider"]].append(m)
+
+    for provider in seen_providers:
+        choices.append(questionary.Separator(f"\n{provider.upper()}"))
+        for m in grouped[provider]:
+            choices.append(questionary.Choice(title=f"  {m['label']}", value=m["id"]))
+
+    choices.append(questionary.Separator())
+    choices.append(questionary.Choice(title="Show all models", value="SHOW ALL"))
+
+    result = select_choice("Choose a model", choices)
+
+    if result != "SHOW ALL":
+        return result
+
+    all_models = fetch_all_models()
+    fallback_choices = [
+        questionary.Choice(title=f"{m['name']}", value=m["id"])
+        for m in all_models
+    ]
+
+    return select_choice("Choose a model:", fallback_choices)

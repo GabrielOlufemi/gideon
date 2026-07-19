@@ -4,7 +4,7 @@ from tools.list_directories import list_directories, LIST_DIRECTORIES_SCHEMA
 from tools.write_file import write_file, WRITE_FILE_SCHEMA
 from tools.run_bash import run_bash, RUN_BASH_SCHEMA
 
-MODEL = "google/gemini-2.5-flash"
+from config import load_config
 
 TOOLS = [
     READ_FILE_SCHEMA, 
@@ -14,3 +14,7 @@ TOOLS = [
 ]
 
 DESTRUCTIVE_TOOLS = ["write_file", "run_bash"]
+
+
+def get_model() -> str:
+    return load_config()["model"]

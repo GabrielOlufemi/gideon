@@ -6,19 +6,20 @@ from exceptions import PickerCancelled
 
 from loop import run_loop
 
-# prompt import
 from system_prompt import build_system_prompt
 
-# config.py import
-from config import get_agent_name, is_configured
+from config import get_agent_name, is_configured, load_config, save_config
 
-# tool related imports
+from onboarding import run_onboarding
+from models import pick_model
+
+from display import print_welcome
+
 from tools_config import TOOLS, DESTRUCTIVE_TOOLS
 
-# onboarding import
-from onboarding import run_onboarding
-
 def main() -> None:
+
+    print_welcome(str(Path.cwd()))
 
     if not is_configured():
         try:
@@ -26,6 +27,16 @@ def main() -> None:
         except PickerCancelled:
             print("Setup cancelled. Exiting")
             return
+
+    try:
+        model = pick_model()
+    except PickerCancelled:
+        print("No model selected. Exiting")
+        return
+
+    config = load_config()
+    config["model"] = model
+    save_config(config)
 
     cwd = Path.cwd()
 
@@ -41,12 +52,9 @@ def main() -> None:
         context = load_session(session_path)
     else:
         context = []
-        # retrieving system prompt
         system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
         context.append({"role": "system", "content": system_prompt})
 
-
-    # loop exec
     run_loop(context, session_path)
     
 if __name__ == "__main__":

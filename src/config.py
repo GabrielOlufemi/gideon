@@ -38,4 +38,4 @@ def get_agent_name() -> str:
 # exists on startup to know if setup has occurred before
 def is_configured() -> bool:
     config = load_config()
-    return config.get("model") is not None and config.get("openrouter_api_key") is not None
+    return config.get("openrouter_api_key") is not None

@@ -115,3 +115,8 @@ def print_welcome(cwd: str) -> None:
         )
     )
     console.print()
+
+def print_success(message: str) -> None:
+    console.print()
+    console.print(f"   [{COLORS['accent']}]{message}[/{COLORS['accent']}]")
+    console.print()

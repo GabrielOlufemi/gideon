@@ -18,8 +18,7 @@ from tools.read_file import read_file
 from tools.write_file import write_file
 from tools.list_directories import list_directories
 from tools.run_bash import run_bash
-
-from tools_config import MODEL, TOOLS, DESTRUCTIVE_TOOLS
+from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 ALWAYS_ALLOWED = []
 
@@ -104,6 +103,8 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         return "no"
 
 def run_loop(context: list[dict], session_path: Path) -> None:
+    model = get_model()
+
     while True:
 
         user_input = input("> ")
@@ -128,7 +129,7 @@ def run_loop(context: list[dict], session_path: Path) -> None:
         try:
             
             while True:
-                response = chat(context, MODEL, TOOLS)
+                response = chat(context, model, TOOLS)
                 message = response["choices"][0]["message"]
 
                 if message.get("tool_calls"):
