@@ -1,5 +1,6 @@
 import json
 from openrouter import chat
+from config import load_config
 
 # scaffolding stuff
 from pathlib import Path
@@ -110,6 +111,8 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
 
 def run_loop(context: list[dict], session_path: Path) -> None:
     model = get_model()
+    api_key = load_config()["openrouter_api_key"]
+
 
     while True:
 
@@ -144,7 +147,7 @@ def run_loop(context: list[dict], session_path: Path) -> None:
         try:
             
             while True:
-                response = chat(context, model, TOOLS)
+                response = chat(context, model, api_key, TOOLS)
                 message = response["choices"][0]["message"]
 
                 if message.get("tool_calls"):

@@ -2,15 +2,6 @@ import json
 import httpx
 from exceptions import AuthError, NetworkError, NoCreditsError
 
-import os
-from pathlib import Path
-from dotenv import load_dotenv
-
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=ENV_PATH)
-
-OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-
 CONNECT_LIMIT = 10.0
 WRITE_LIMIT = 10.0
 READ_LIMIT = 300.0
@@ -18,7 +9,7 @@ POOL_LIMIT = 10.0
 
 TIMEOUT = httpx.Timeout(connect=CONNECT_LIMIT, read=READ_LIMIT, write=WRITE_LIMIT, pool=POOL_LIMIT)
 
-def chat(messages: list[dict], model: str, tools: list[dict] = None) -> dict:
+def chat(messages: list[dict], model: str, api_key: str, tools: list[dict] = None) -> dict:
 
     body = {
         "model" : model,
@@ -35,7 +26,7 @@ def chat(messages: list[dict], model: str, tools: list[dict] = None) -> dict:
             url = "https://openrouter.ai/api/v1/chat/completions",
 
             headers = {
-                "Authorization" : f"Bearer {OPENROUTER_KEY}",
+                "Authorization" : f"Bearer {api_key}",
             },
 
             data=json.dumps(body),

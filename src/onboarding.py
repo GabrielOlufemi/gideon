@@ -27,6 +27,8 @@ def collect_api_key() -> str:
         if api_key is None:
             raise PickerCancelled("Key entry cancelled by user")
 
+        api_key = api_key.strip()
+        
         try:
             is_valid = validate_key(api_key)
         except AuthError:

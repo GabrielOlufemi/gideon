@@ -111,7 +111,7 @@ def print_welcome(cwd: str) -> None:
         "1. Choose a model\n"
         "2. Add your OpenRouter key\n\n"
         "[bold]Who is Gideon?[/bold] \nHey, I'm Gideon, gabriel's alter ego (sort of) and "
-        "your terminal coding agent. Point me at a problem and I'll get "
+        "your terminal coding agent. Point me at a problem and I'll "
         "poke through your codebase, run commands and do the heavy lifting while you sit back and relax."
         " I'll simply check with you first before doing anything permanent."
     )
