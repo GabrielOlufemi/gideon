@@ -7,6 +7,8 @@ from rich.table import Table
 from rich.rule import Rule
 from rich import box
 
+import re
+
 from config import get_agent_name
 
 AGENT_NAME = get_agent_name()
@@ -35,13 +37,13 @@ LEFT_ONLY = Box(
 )
 
 console = Console()
-
+CODE_INDENT = (0, 0, 0, 5)
 
 def print_user(message: str) -> None:
     print("\033[F\033[K", end="")
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
     console.print(Rule(style="dim"))
-    console.print("   / for shortcuts [haven't done this yet]", style=COLORS["tool_detail"])
+    console.print("   / for shortcuts (haven't done this yet)", style=COLORS["tool_detail"])
 
 
 def print_top_rule() -> None:
@@ -52,16 +54,25 @@ def print_tool(message: str) -> None:
 
 
 def print_reply(message: str) -> None:
-    console.print(Padding(
-        Panel(
-            Markdown(message),
-            box=LEFT_ONLY,
-            border_style=COLORS["accent"],
-            expand=False,
-            padding=(0, 1),
-        ),
-        INDENT,
-    ))
+    parts = re.split(r"(```[\s\S]*?```)", message)
+
+    for part in parts:
+        if not part.strip():
+            continue
+
+        if part.startswith("```"):
+            console.print(Padding(Markdown(part), CODE_INDENT))
+        else:
+            console.print(Padding(
+                Panel(
+                    Markdown(part.strip()),
+                    box=LEFT_ONLY,
+                    border_style=COLORS["accent"],
+                    expand=False,
+                    padding=(0, 1),
+                ),
+                INDENT,
+            ))
 
 
 def print_error(message: str) -> None:
@@ -88,19 +99,19 @@ def print_permission(name: str, details: str) -> None:
 
 def print_welcome(cwd: str) -> None:
     left = (
-        "[bold]Welcome to Gideon[/bold]\n"
-        f"[dim]{cwd}[/dim]\n"
-        "No model selected yet"
+        f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
+        # "No model selected yet"
+        "\n\n[bold]/settings[/bold] [dim]to access configuration (haven't done this yet)"
     )
 
     right = (
         "[bold]Setup[/bold]\n"
         "1. Choose a model\n"
-        "2. Add your OpenRouter key\n"
+        "2. Add your OpenRouter key\n\n"
         "[bold]Who is Gideon?[/bold] \nHey, I'm Gideon, gabriel's alter ego (sort of) and "
         "your terminal coding agent. Point me at a problem and I'll get "
-        "poke through your codebase, run commands and doing the heavy lifting while you sit back and relax."
-        " I'll just check with you first before doing anything permanent."
+        "poke through your codebase, run commands and do the heavy lifting while you sit back and relax."
+        " I'll simply check with you first before doing anything permanent."
     )
 
     layout = Table(box=box.SQUARE, show_header=False, show_edge=False, padding=(0, 2), expand=True)
