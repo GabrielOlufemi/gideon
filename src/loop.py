@@ -22,10 +22,14 @@ from tools.list_directories import list_directories
 from tools.run_bash import run_bash
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
+# commands stuff
+from commands.settings import open_settings
+
 ALWAYS_ALLOWED = []
 
 # terminate words
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
+CONSOLE_COMMANDS = ["/settings"]
 
 # stores conversation history per session
 # context = [] -> moved ts to main.py
@@ -117,6 +121,14 @@ def run_loop(context: list[dict], session_path: Path) -> None:
         if user_input.strip().lower() in TERMINATE_KEYWORDS:
             break
 
+        # check if input is a console command
+        if user_input.strip().lower() in CONSOLE_COMMANDS:
+
+            if user_input.strip().lower() == "/settings":
+                open_settings()
+                continue
+
+ 
         # check if input is empty
         if user_input.strip().lower() == "":
             # error print

@@ -9,6 +9,7 @@ from rich import box
 
 import re
 
+
 from config import get_agent_name
 
 AGENT_NAME = get_agent_name()
@@ -87,6 +88,7 @@ def print_permission(name: str, details: str) -> None:
             title=f"{name}",
             title_align="left",
             border_style=COLORS["accent"],
+            box=box.SQUARE,
             expand=False,
             padding=(0, 1),
         ),
@@ -101,7 +103,7 @@ def print_welcome(cwd: str) -> None:
     left = (
         f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
         # "No model selected yet"
-        "\n\n[bold]/settings[/bold] [dim]to access configuration (haven't done this yet)"
+        "\n\n[bold]/settings[/bold] [dim]to access configuration"
     )
 
     right = (
@@ -136,4 +138,10 @@ def print_welcome(cwd: str) -> None:
 def print_success(message: str) -> None:
     console.print()
     console.print(f"   [{COLORS['accent']}]{message}[/{COLORS['accent']}]")
+    console.print()
+
+def print_info(lines: list[str]) -> None:
+    console.print()
+    for line in lines:
+        console.print(f"   [{COLORS['accent']}]{line}[/{COLORS['accent']}]")
     console.print()
