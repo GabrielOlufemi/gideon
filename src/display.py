@@ -3,10 +3,14 @@ from rich.panel import Panel
 from rich.box import Box
 from rich.padding import Padding
 from rich.markdown import Markdown
+from rich.table import Table
+from rich import box
 
 from config import get_agent_name
 
 AGENT_NAME = get_agent_name()
+VERSION = "0.1.0"
+
 
 COLORS = {
     "user_input": "on grey19",
@@ -74,45 +78,40 @@ def print_permission(name: str, details: str) -> None:
     console.print()
 
 
-
 # welcome stuff
 
-from rich.table import Table
-
-# placeholder gif for now
-GLYPH = """\
-  ▄▄▄▄▄▄
- █      
- █  ▄▄▄▄
- █     █
- █     █
-  ▀▀▀▀▀▀"""
-
-
-def print_welcome() -> None:
-    left = f"[{COLORS['accent']}]{GLYPH}[/{COLORS['accent']}]"
+def print_welcome(cwd: str) -> None:
+    left = (
+        "[bold]Welcome to Gideon[/bold]\n"
+        f"[dim]{cwd}[/dim]\n"
+        "No model selected yet"
+    )
 
     right = (
         "[bold]Setup[/bold]\n"
         "1. Choose a model\n"
-        "2. Add your OpenRouter key"
+        "2. Add your OpenRouter key\n"
+        "[bold]Who is Gideon?[/bold] Hey, I'm Gideon, gabriel's alter ego (sort of) and "
+        "your terminal coding agent. Point me at a problem and I'll get "
+        "poke through your code, run commands and doing the heavy lifting while you sit back and relax."
+        " I'll just check with you first before doing anything permanent."
     )
 
-    layout = Table.grid(padding=(0, 3))
-    layout.add_column()
-    layout.add_column()
+    layout = Table(box=box.SQUARE, show_header=False, show_edge=False, padding=(0, 2), expand=True)
+    layout.add_column(ratio=1)
+    layout.add_column(ratio=2)
     layout.add_row(left, right)
 
     console.print()
-    console.print(Padding(
+    console.print(
         Panel(
             layout,
-            title="Gideon",
+            title=f"Gideon v{VERSION}",
             title_align="left",
             border_style=COLORS["accent"],
-            expand=False,
-            padding=(1, 2),
-        ),
-        INDENT,
-    ))
+            box=box.SQUARE,
+            expand=True,
+            padding=(0, 2),
+        )
+    )
     console.print()

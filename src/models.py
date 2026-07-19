@@ -21,19 +21,12 @@ RECOMMENDED_MODELS = [
 
 
 def fetch_all_models() -> list[dict]:
-    """
-    Hits OpenRouter's live model catalog via openrouter.py's fetch_models(),
-    then filters down to models actually usable by a coding agent —
-    text in, text out. Filtering lives here, not in onboarding.py, so
-    callers just get back a list of usable models without needing to
-    know what "usable" means.
-    """
     raw_models = fetch_models()
 
     usable = [
         m for m in raw_models
-        if "text" in m.get("input_modalities", [])
-        and "text" in m.get("output_modalities", [])
+        if "text" in m.get("architecture", {}).get("input_modalities", [])
+        and "text" in m.get("architecture", {}).get("output_modalities", [])
     ]
 
     return usable

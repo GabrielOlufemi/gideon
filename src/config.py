@@ -6,9 +6,9 @@ CONFIG_DIR = Path.home() / ".gideon"
 CONFIG_PATH= CONFIG_DIR / "config.json"
 
 DEFAULTS = {
-
-    "agent_name" : "Gideon"
-
+    "agent_name" : "Gideon",
+    "model" : None,
+    "openrouter_api_key" : None
 }
 
 # reads config file``
@@ -28,10 +28,14 @@ def load_config() -> dict:
 def save_config(config: dict) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    with open(CONFIG_DIR, "w") as f:
+    with open(CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=2)
 
 # retrieves agent name -> incase I decide to change agent name
 def get_agent_name() -> str:
     return load_config()["agent_name"]
 
+# exists on startup to know if setup has occurred before
+def is_configured() -> bool:
+    config = load_config()
+    return config.get("model") is not None and config.get("openrouter_api_key") is not None

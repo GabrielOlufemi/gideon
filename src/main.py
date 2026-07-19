@@ -10,12 +10,23 @@ from loop import run_loop
 from system_prompt import build_system_prompt
 
 # config.py import
-from config import get_agent_name
+from config import get_agent_name, is_configured
 
 # tool related imports
 from tools_config import TOOLS, DESTRUCTIVE_TOOLS
 
+# onboarding import
+from onboarding import run_onboarding
+
 def main() -> None:
+
+    if not is_configured():
+        try:
+            run_onboarding()
+        except PickerCancelled:
+            print("Setup cancelled. Exiting")
+            return
+
     cwd = Path.cwd()
 
     session_dir = get_session_dir(str(cwd))

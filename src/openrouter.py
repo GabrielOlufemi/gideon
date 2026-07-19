@@ -85,3 +85,21 @@ def validate_key(api_key: str) -> bool:
 
     except httpx.ConnectError:
         raise NetworkError("Could not reach Openrouter")
+    
+
+def fetch_models() -> list[dict]:
+    try:
+        response = httpx.get(
+            url="https://openrouter.ai/api/v1/models",
+            timeout=TIMEOUT
+        )
+
+        if response.status_code != 200:
+            raise NetworkError(f"OpenRouter returned status {response.status_code}")
+
+        return response.json()["data"]
+
+    except httpx.TimeoutException:
+        raise NetworkError("Request to OpenRouter timed out. Try again in a moment")
+    except httpx.ConnectError:
+        raise NetworkError("Could not reach OpenRouter")
