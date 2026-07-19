@@ -39,7 +39,6 @@ console = Console()
 def print_user(message: str) -> None:
     print("\033[F\033[K", end="")
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
-    console.print()
 
 def print_tool(message: str) -> None:
     console.print(f"   {message}", style=COLORS["tool_detail"])
