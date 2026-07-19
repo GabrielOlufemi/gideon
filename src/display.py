@@ -72,3 +72,47 @@ def print_permission(name: str, details: str) -> None:
         INDENT,
     ))
     console.print()
+
+
+
+# welcome stuff
+
+from rich.table import Table
+
+# placeholder gif for now
+GLYPH = """\
+  ▄▄▄▄▄▄
+ █      
+ █  ▄▄▄▄
+ █     █
+ █     █
+  ▀▀▀▀▀▀"""
+
+
+def print_welcome() -> None:
+    left = f"[{COLORS['accent']}]{GLYPH}[/{COLORS['accent']}]"
+
+    right = (
+        "[bold]Setup[/bold]\n"
+        "1. Choose a model\n"
+        "2. Add your OpenRouter key"
+    )
+
+    layout = Table.grid(padding=(0, 3))
+    layout.add_column()
+    layout.add_column()
+    layout.add_row(left, right)
+
+    console.print()
+    console.print(Padding(
+        Panel(
+            layout,
+            title="Gideon",
+            title_align="left",
+            border_style=COLORS["accent"],
+            expand=False,
+            padding=(1, 2),
+        ),
+        INDENT,
+    ))
+    console.print()

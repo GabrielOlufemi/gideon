@@ -17,7 +17,7 @@ def load_config() -> dict:
         return dict(DEFAULTS)
     
     with open(CONFIG_PATH, "r") as f:
-        config = json.load()
+        config = json.load(f)
 
     for key, value in DEFAULTS.items():
         config.setdefault(key,value)
