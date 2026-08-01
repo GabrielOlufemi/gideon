@@ -21,6 +21,8 @@ from tools.read_file import read_file
 from tools.write_file import write_file
 from tools.list_directories import list_directories
 from tools.run_bash import run_bash
+from tools.edit_file import edit_file
+from tools.grep_search import grep_search
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 # commands stuff
@@ -31,6 +33,7 @@ ALWAYS_ALLOWED = []
 # terminate words
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
 CONSOLE_COMMANDS = ["/settings"]
+# to add /restore, /sessions
 
 # stores conversation history per session
 # context = [] -> moved ts to main.py
@@ -73,6 +76,23 @@ def run_tool(call):
         print_tool(f"Executing command:  {arguments["command"]}")
         return run_bash(arguments["command"])
 
+    if name == "edit_file":
+        print_tool(f"Editing {arguments["path"]}...")
+        return edit_file(
+            arguments["path"],
+            arguments["old_string"],
+            arguments["new_string"],
+            arguments.get("replace_all", False)
+        )
+
+    if name == "grep_search":
+        print_tool(f"Searching for: {arguments["pattern"]}...")
+        return grep_search(
+            arguments["pattern"],
+            arguments.get("path", "."),
+            arguments.get("case_sensitive", True)
+        )
+
     return f"Error: unknown tool '{name}'"
 
 
@@ -84,6 +104,8 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         details = f"path: {arguments.get('path')}"
     elif name == "run_bash":
         details = f"command: {arguments.get('command')}"
+    elif name == "edit_file":
+        details = f"path: {arguments.get('path')}"
     else:
         details = f"arguments: {arguments}"
 

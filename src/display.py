@@ -41,11 +41,15 @@ console = Console()
 CODE_INDENT = (0, 0, 0, 5)
 
 def print_user(message: str) -> None:
-    print("\033[F\033[K", end="")
+    lines_used = (len(f"> {message}") // console.width) + 1
+    for _ in range(lines_used):
+        print("\033[F\033[K", end="")
+
+    console.print(Rule(style="dim"))
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
     console.print(Rule(style="dim"))
     console.print("   / for shortcuts (haven't done this yet)", style=COLORS["tool_detail"])
-
+    
 
 def print_top_rule() -> None:
     console.print(Rule(style="dim"))
