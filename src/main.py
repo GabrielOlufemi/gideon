@@ -55,7 +55,7 @@ def main() -> None:
         # system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
         # context.append({"role": "system", "content": system_prompt})
 
-    run_loop(context, session_path)
+    run_loop(context, session_path, session_dir)
     
 if __name__ == "__main__":
     main()

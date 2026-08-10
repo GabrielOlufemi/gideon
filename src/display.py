@@ -8,6 +8,7 @@ from rich.rule import Rule
 from rich import box
 
 import re
+import sys
 
 
 from config import get_agent_name
@@ -45,10 +46,9 @@ def print_user(message: str) -> None:
     for _ in range(lines_used):
         print("\033[F\033[K", end="")
 
-    console.print(Rule(style="dim"))
     console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
     console.print(Rule(style="dim"))
-    console.print("   / for shortcuts (haven't done this yet)", style=COLORS["tool_detail"])
+    console.print("   Ctrl+C to interrupt  /  / for shortcuts", style=COLORS["tool_detail"])
     
 
 def print_top_rule() -> None:
@@ -56,6 +56,12 @@ def print_top_rule() -> None:
 
 def print_tool(message: str) -> None:
     console.print(f"   {message}", style=COLORS["tool_detail"])
+
+
+def stream_token(token: str) -> None:
+    """Write a single token to stdout with accent color. Flushes immediately."""
+    console.out(token, end="", style=COLORS["accent"])
+    sys.stdout.flush()
 
 
 def print_reply(message: str) -> None:

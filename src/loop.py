@@ -1,19 +1,20 @@
 import json
-from openrouter import chat
+import difflib
+from openrouter import chat_stream
 from config import load_config
 
 # scaffolding stuff
 from pathlib import Path
-from session_manager import save_session
+from session_manager import save_session, list_sessions, new_session_path, load_session
 
 # normal config imports
 from config import get_agent_name
 
 # color config imports 
 from display import (
-    print_error, print_reply, 
-    print_tool, print_permission,print_user,
-    print_top_rule
+    print_error, stream_token,
+    print_tool, print_permission, print_user,
+    print_top_rule, print_info, print_success, console
 )
 
 from picker import select_choice
@@ -29,7 +30,8 @@ from tools.edit_file import edit_file
 from tools.grep_search import grep_search
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
-# system prompt p
+from tools.pathsafe import BASE_PATH
+from rich.syntax import Syntax
 from system_prompt import build_system_prompt
 
 # commands stuff
@@ -39,8 +41,7 @@ ALWAYS_ALLOWED = []
 
 # terminate words
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/settings"]
-# to add /restore, /sessions
+CONSOLE_COMMANDS = ["/settings", "/sessions", "/restore"]
 
 # stores conversation history per session
 # context = [] -> moved ts to main.py
@@ -103,16 +104,75 @@ def run_tool(call):
     return f"Error: unknown tool '{name}'"
 
 
+# diff generation for permission prompts
+def _generate_write_diff(path: str, new_content: str) -> str | None:
+    target = (BASE_PATH / path).resolve()
+
+    try:
+        old = target.read_text() if target.exists() else ""
+    except Exception:
+        return None
+
+    old_lines = old.splitlines(keepends=True)
+    new_lines = new_content.splitlines(keepends=True)
+
+    fromfile = "/dev/null" if not target.exists() else path
+
+    diff = difflib.unified_diff(
+        old_lines, new_lines,
+        fromfile=fromfile, tofile=path,
+        n=3
+    )
+
+    return "".join(diff)
+
+
+def _generate_edit_diff(path: str, old_string: str, new_string: str) -> str | None:
+    target = (BASE_PATH / path).resolve()
+
+    if not target.exists():
+        return None
+
+    try:
+        original = target.read_text()
+    except Exception:
+        return None
+
+    if old_string not in original:
+        return None
+
+    modified = original.replace(old_string, new_string, 1)
+
+    old_lines = original.splitlines(keepends=True)
+    new_lines = modified.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        old_lines, new_lines,
+        fromfile=path, tofile=path,
+        n=3
+    )
+
+    return "".join(diff)
+
+
 # permission request logic
 def request_permission(name: str, arguments: dict[str, str]) -> str:
 
     # individual check for existing tools
     if name == "write_file":
         details = f"path: {arguments.get('path')}"
-    elif name == "run_bash":
-        details = f"command: {arguments.get('command')}"
+        diff = _generate_write_diff(arguments["path"], arguments["content"])
+        if diff:
+            console.print()
+            console.print(Syntax(diff, "diff", line_numbers=False))
     elif name == "edit_file":
         details = f"path: {arguments.get('path')}"
+        diff = _generate_edit_diff(arguments["path"], arguments["old_string"], arguments["new_string"])
+        if diff:
+            console.print()
+            console.print(Syntax(diff, "diff", line_numbers=False))
+    elif name == "run_bash":
+        details = f"command: {arguments.get('command')}"
     else:
         details = f"arguments: {arguments}"
 
@@ -138,7 +198,7 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         print_error("Cancelled, denying by default")
         return "no"
 
-def run_loop(context: list[dict], session_path: Path) -> None:
+def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None:
     model = get_model()
     api_key = load_config()["openrouter_api_key"]
 
@@ -149,15 +209,49 @@ def run_loop(context: list[dict], session_path: Path) -> None:
         user_input = input("> ")
         print_user(user_input)
 
-        # check if input attempts termiante
-        if user_input.strip().lower() in TERMINATE_KEYWORDS:
+        # check if input is a console command
+        cmd_parts = user_input.strip().split()
+        cmd = cmd_parts[0].lower() if cmd_parts else ""
+
+        if cmd in TERMINATE_KEYWORDS:
             break
 
-        # check if input is a console command
-        if user_input.strip().lower() in CONSOLE_COMMANDS:
+        if cmd in CONSOLE_COMMANDS:
 
-            if user_input.strip().lower() == "/settings":
+            if cmd == "/settings":
                 open_settings()
+                continue
+
+            if cmd == "/sessions":
+                sessions = list_sessions(session_dir)
+                if not sessions:
+                    print_info(["No sessions for this project."])
+                else:
+                    lines = []
+                    for i, s in enumerate(sessions, start=1):
+                        lines.append(f"{i}. {s['display']}")
+                    print_info(lines)
+                continue
+
+            if cmd == "/restore":
+                if len(cmd_parts) < 2:
+                    print_error("Usage: /restore <session_number>")
+                    continue
+                try:
+                    session_num = int(cmd_parts[1])
+                except ValueError:
+                    print_error("Usage: /restore <session_number>")
+                    continue
+
+                sessions = list_sessions(session_dir)
+                if session_num < 1 or session_num > len(sessions):
+                    print_error(f"Session {session_num} not found. Use /sessions to list them.")
+                    continue
+
+                target = sessions[session_num - 1]
+                context = load_session(target["path"])
+                session_path = new_session_path(session_dir)
+                print_success(f"Restored from {target['display']} in a new session.")
                 continue
 
  
@@ -168,59 +262,54 @@ def run_loop(context: list[dict], session_path: Path) -> None:
             continue
 
         # start of a turn
-        # add to context
-        context.append({
-            "role":"user", "content":user_input
-        })
-
         try:
-            
+            context.append({
+                "role":"user", "content":user_input
+            })
+
             while True:
                 system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
-                response = chat([system_message] + context, model, api_key, TOOLS) 
-                
-                message = response["choices"][0]["message"] 
+                stream = chat_stream([system_message] + context, model, api_key, TOOLS)
 
-                if message.get("tool_calls"):
-                    context.append(message)
+                final_message = None
+                streamed_content = False
 
-                    # set of ids model promises to call for this turn
-                    tool_call_ids = {call["id"] for call in message["tool_calls"]}
+                for chunk in stream:
+                    if isinstance(chunk, str):
+                        if not streamed_content:
+                            streamed_content = True
+                            stream_token("   ")
+                        stream_token(chunk)
+                    else:
+                        final_message = chunk
+                        if streamed_content:
+                            print()
 
-                    # set of ids actually called + successfully executed
-                    answered_ids = set()
+                if final_message is None:
+                    break
 
-                    try:
-                        for call in message["tool_calls"]:
-                            
+                if final_message.get("tool_calls"):
+                    context.append(final_message)
+
+                    for call in final_message["tool_calls"]:
+                        try:
                             result = run_tool(call)
-
-                            # tool call completion
                             print_tool(f"Done.")
-
                             context.append({
-                                "role" : "tool",
-                                "tool_call_id" : call["id"],
-                                "content" : result
+                                "role": "tool",
+                                "tool_call_id": call["id"],
+                                "content": result
                             })
-
-                            answered_ids.add(call["id"])
-                    except Exception as e:
-                    
-                        #missing tool calls that never got a corresponding tool response
-                        missing_ids = tool_call_ids - answered_ids
-
-                        for missing_id in missing_ids:
+                        except Exception as e:
                             context.append({
-                                "role" : "tool",
-                                "tool_call_id" : missing_id,
-                                "content" : f"Error: {e}"
+                                "role": "tool",
+                                "tool_call_id": call["id"],
+                                "content": f"Error: {e}"
                             })
-
 
                     continue
 
-                reply_text = message["content"]
+                reply_text = final_message.get("content") or ""
 
                 context.append({
                     "role":"assistant", "content":reply_text
@@ -230,12 +319,8 @@ def run_loop(context: list[dict], session_path: Path) -> None:
                 save_session(session_path, context)
 
                 break
-    
-    
+
         except Exception as e:
             # error print
             print_error(f"Error: {e}")
             continue
-        
-        # default response print
-        print_reply(f"{reply_text}")
