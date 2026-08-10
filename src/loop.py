@@ -6,12 +6,16 @@ from config import load_config
 from pathlib import Path
 from session_manager import save_session
 
+# normal config imports
+from config import get_agent_name
+
 # color config imports 
 from display import (
     print_error, print_reply, 
     print_tool, print_permission,print_user,
     print_top_rule
 )
+
 from picker import select_choice
 from exceptions import PickerCancelled
 import questionary
@@ -24,6 +28,9 @@ from tools.run_bash import run_bash
 from tools.edit_file import edit_file
 from tools.grep_search import grep_search
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
+
+# system prompt p
+from system_prompt import build_system_prompt
 
 # commands stuff
 from commands.settings import open_settings
@@ -169,8 +176,10 @@ def run_loop(context: list[dict], session_path: Path) -> None:
         try:
             
             while True:
-                response = chat(context, model, api_key, TOOLS)
-                message = response["choices"][0]["message"]
+                system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
+                response = chat([system_message] + context, model, api_key, TOOLS) 
+                
+                message = response["choices"][0]["message"] 
 
                 if message.get("tool_calls"):
                     context.append(message)

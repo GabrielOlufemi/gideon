@@ -59,6 +59,7 @@ def grep_search(pattern: str, path: str = ".", case_sensitive: bool = True) -> s
     for excluded in EXCLUDED_DIRS:
         command.append(f"--exclude-dir={excluded}")
 
+    command.append("--")
     command.append(pattern)
     command.append(str(target))
 

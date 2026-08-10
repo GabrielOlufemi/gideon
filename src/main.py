@@ -52,8 +52,8 @@ def main() -> None:
         context = load_session(session_path)
     else:
         context = []
-        system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
-        context.append({"role": "system", "content": system_prompt})
+        # system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
+        # context.append({"role": "system", "content": system_prompt})
 
     run_loop(context, session_path)
     
