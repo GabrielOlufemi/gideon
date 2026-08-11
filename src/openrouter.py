@@ -9,6 +9,7 @@ POOL_LIMIT = 10.0
 
 TIMEOUT = httpx.Timeout(connect=CONNECT_LIMIT, read=READ_LIMIT, write=WRITE_LIMIT, pool=POOL_LIMIT)
 
+# currently redundant
 def chat(messages: list[dict], model: str, api_key: str, tools: list[dict] = None) -> dict:
 
     body = {
@@ -77,6 +78,7 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
 
                 content_so_far = ""
                 tool_calls_by_index = {}
+                usage = None
 
                 for line in response.iter_lines():
                     if not line.startswith("data: "):
@@ -94,6 +96,11 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                     choice = chunk["choices"][0]
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason")
+
+                    # Capture usage from the chunk if present (OpenRouter includes it
+                    # in the final streaming chunk alongside finish_reason)
+                    if "usage" in chunk:
+                        usage = chunk["usage"]
 
                     # Content tokens
                     content = delta.get("content")
@@ -134,6 +141,11 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                                 tool_calls_by_index[i]
                                 for i in sorted(tool_calls_by_index.keys())
                             ]
+                        if usage:
+                            message["usage"] = {
+                                "prompt_tokens": usage.get("prompt_tokens", 0),
+                                "completion_tokens": usage.get("completion_tokens", 0),
+                            }
                         yield message
                         break
 

@@ -4,6 +4,7 @@ import questionary
 
 from openrouter import fetch_models
 from picker import select_choice
+from config import set_context_length
 
 RECOMMENDED_MODELS = [
     {"id": "anthropic/claude-opus-4.8",  "label": "Claude Opus 4.8",  "provider": "Anthropic"},
@@ -36,6 +37,21 @@ def fetch_all_models() -> list[dict]:
     return usable
 
 
+def _lookup_context_length(model_id: str, all_models: list[dict] | None = None) -> int | None:
+    """Look up context_length for a given model ID from the OpenRouter model list."""
+    if all_models is None:
+        try:
+            all_models = fetch_models()
+        except Exception:
+            return None
+
+    for m in all_models:
+        if m.get("id") == model_id:
+            return m.get("context_length")
+
+    return None
+
+
 def pick_model() -> str:
     choices = []
     seen_providers = []
@@ -56,13 +72,32 @@ def pick_model() -> str:
 
     result = select_choice("Choose a model", choices)
 
+    # Fetch the raw model list once upfront; use for both recommended and full paths
+    raw_models = fetch_models()
+
     if result != "SHOW ALL":
+        ctx_len = _lookup_context_length(result, raw_models)
+        if ctx_len:
+            set_context_length(ctx_len)
         return result
 
-    all_models = fetch_all_models()
-    fallback_choices = [
-        questionary.Choice(title=f"{m['name']}", value=m["id"])
-        for m in all_models
+    recommended_ids = {m["id"] for m in RECOMMENDED_MODELS}
+    usable = [
+        m for m in raw_models
+        if "text" in m.get("architecture", {}).get("input_modalities", [])
+        and "text" in m.get("architecture", {}).get("output_modalities", [])
+        and m.get("id") not in recommended_ids
     ]
 
-    return select_choice("Choose a model:", fallback_choices)
+    fallback_choices = [
+        questionary.Choice(title=f"{m['name']}", value=m["id"])
+        for m in usable
+    ]
+
+    picked = select_choice("Choose a model:", fallback_choices)
+
+    ctx_len = _lookup_context_length(picked, raw_models)
+    if ctx_len:
+        set_context_length(ctx_len)
+
+    return picked

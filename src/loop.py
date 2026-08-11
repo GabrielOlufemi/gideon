@@ -1,5 +1,4 @@
 import json
-import difflib
 from openrouter import chat_stream
 from config import load_config
 
@@ -12,11 +11,13 @@ from config import get_agent_name
 
 # color config imports 
 from display import (
-    print_error, stream_token,
+    print_error, StreamDisplay, print_edit_diff, print_write_summary, print_context_bar,
     print_tool, print_permission, print_user,
-    print_top_rule, print_info, print_success, console
+    print_top_rule, print_info, print_success, console, COLORS
 )
 
+from prompt_toolkit import PromptSession
+from prompt_toolkit.key_binding import KeyBindings
 from picker import select_choice
 from exceptions import PickerCancelled
 import questionary
@@ -31,23 +32,16 @@ from tools.grep_search import grep_search
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 from tools.pathsafe import BASE_PATH
-from rich.syntax import Syntax
-from system_prompt import build_system_prompt
+from system_prompt import build_system_prompt, build_reminder
 
 # commands stuff
 from commands.settings import open_settings
 
-ALWAYS_ALLOWED = []
-
-# terminate words
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
 CONSOLE_COMMANDS = ["/settings", "/sessions", "/restore"]
 
-# stores conversation history per session
-# context = [] -> moved ts to main.py
-
 # tool exec logic
-def run_tool(call):
+def run_tool(call, always_allowed: list[str]):
     name = call["function"]["name"]
 
     try:
@@ -55,14 +49,12 @@ def run_tool(call):
     except json.JSONDecodeError as e:
         return f"Error: malformed arguments for '{name}' : {e}"
 
-    if name in DESTRUCTIVE_TOOLS and name not in ALWAYS_ALLOWED:
+    if name in DESTRUCTIVE_TOOLS and name not in always_allowed:
         decision = request_permission(name, arguments)
-
         if decision == "no":
             return f"Permission denied by user for '{name}'"
-        
         if decision == "always":
-            ALWAYS_ALLOWED.append(name)
+            always_allowed.append(name)
 
 
     if name == "read_file":
@@ -81,17 +73,27 @@ def run_tool(call):
         return list_directories(arguments["dir_path"])
     
     if name == "run_bash":
-        print_tool(f"Executing command:  {arguments["command"]}")
+        # added this to remove that redundant command display after run-bash already displays this 
+        # print_tool(f"Executing command:  {arguments["command"]}")
         return run_bash(arguments["command"])
 
     if name == "edit_file":
         print_tool(f"Editing {arguments["path"]}...")
-        return edit_file(
-            arguments["path"],
-            arguments["old_string"],
-            arguments["new_string"],
-            arguments.get("replace_all", False)
-        )
+        path = arguments["path"]
+        old_string = arguments["old_string"]
+        new_string = arguments["new_string"]
+        replace_all = arguments.get("replace_all", False)
+
+        # Capture old content before the edit for diff display
+        old_content = _read_file_content(path)
+
+        result = edit_file(path, old_string, new_string, replace_all)
+
+        # Show diff after successful edit
+        if result.startswith("Success") and old_content is not None:
+            print_edit_diff(path, old_content, old_string, new_string)
+
+        return result
 
     if name == "grep_search":
         print_tool(f"Searching for: {arguments["pattern"]}...")
@@ -104,73 +106,38 @@ def run_tool(call):
     return f"Error: unknown tool '{name}'"
 
 
-# diff generation for permission prompts
-def _generate_write_diff(path: str, new_content: str) -> str | None:
+def _read_file_content(path: str) -> str | None:
+    """Read a file's current content for diff display. Returns None if not found."""
     target = (BASE_PATH / path).resolve()
-
     try:
-        old = target.read_text() if target.exists() else ""
+        return target.read_text() if target.exists() else None
     except Exception:
         return None
-
-    old_lines = old.splitlines(keepends=True)
-    new_lines = new_content.splitlines(keepends=True)
-
-    fromfile = "/dev/null" if not target.exists() else path
-
-    diff = difflib.unified_diff(
-        old_lines, new_lines,
-        fromfile=fromfile, tofile=path,
-        n=3
-    )
-
-    return "".join(diff)
-
-
-def _generate_edit_diff(path: str, old_string: str, new_string: str) -> str | None:
-    target = (BASE_PATH / path).resolve()
-
-    if not target.exists():
-        return None
-
-    try:
-        original = target.read_text()
-    except Exception:
-        return None
-
-    if old_string not in original:
-        return None
-
-    modified = original.replace(old_string, new_string, 1)
-
-    old_lines = original.splitlines(keepends=True)
-    new_lines = modified.splitlines(keepends=True)
-
-    diff = difflib.unified_diff(
-        old_lines, new_lines,
-        fromfile=path, tofile=path,
-        n=3
-    )
-
-    return "".join(diff)
 
 
 # permission request logic
 def request_permission(name: str, arguments: dict[str, str]) -> str:
 
-    # individual check for existing tools
+    # Show diff before the permission prompt
+    if name == "write_file":
+        path = arguments.get("path", "")
+        old_content = _read_file_content(path)
+        new_content = arguments.get("content", "")
+        line_count = len(new_content.splitlines()) if new_content else 0
+        print_write_summary(path, old_content is not None, line_count)
+
+    if name == "edit_file":
+        path = arguments.get("path", "")
+        old_string = arguments.get("old_string", "")
+        new_string = arguments.get("new_string", "")
+        old_content = _read_file_content(path)
+        if old_content and old_string != new_string:
+            print_edit_diff(path, old_content, old_string, new_string)
+
     if name == "write_file":
         details = f"path: {arguments.get('path')}"
-        diff = _generate_write_diff(arguments["path"], arguments["content"])
-        if diff:
-            console.print()
-            console.print(Syntax(diff, "diff", line_numbers=False))
     elif name == "edit_file":
         details = f"path: {arguments.get('path')}"
-        diff = _generate_edit_diff(arguments["path"], arguments["old_string"], arguments["new_string"])
-        if diff:
-            console.print()
-            console.print(Syntax(diff, "diff", line_numbers=False))
     elif name == "run_bash":
         details = f"command: {arguments.get('command')}"
     else:
@@ -201,13 +168,46 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
 def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None:
     model = get_model()
     api_key = load_config()["openrouter_api_key"]
+    always_allowed: list[str] = []
 
+    # Build prompt_toolkit session with multiline keybinds
+    kb = KeyBindings()
+
+    @kb.add("enter")
+    def _(event):
+        """Enter submits the input."""
+        event.current_buffer.validate_and_handle()
+
+    @kb.add("escape", "enter")
+    def _(event):
+        """Alt+Enter inserts a newline (pasting multiline text also works natively)."""
+        event.current_buffer.insert_text("\n")
+
+    prompt_session = PromptSession(
+        "> ",
+        key_bindings=kb,
+        multiline=True,
+        history=None,
+        enable_history_search=False,
+        mouse_support=False,
+    )
 
     while True:
 
         print_top_rule()
-        user_input = input("> ")
-        print_user(user_input)
+
+        try:
+            user_input = prompt_session.prompt()
+        except (KeyboardInterrupt, EOFError):
+            print()
+            break
+
+        # prompt_toolkit already displays the "> input" on screen —
+        # just print a summary and the shortcut bar below it
+        line_count = len(user_input.splitlines())
+        if line_count > 1:
+            console.print(f"   [Pasted +{line_count} lines]", style=COLORS["tool_detail"])
+        console.print("   Alt+Enter for newline  |  Ctrl+C to interrupt", style=COLORS["tool_detail"])
 
         # check if input is a console command
         cmd_parts = user_input.strip().split()
@@ -254,7 +254,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 print_success(f"Restored from {target['display']} in a new session.")
                 continue
 
- 
+
         # check if input is empty
         if user_input.strip().lower() == "":
             # error print
@@ -269,21 +269,20 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
             while True:
                 system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
-                stream = chat_stream([system_message] + context, model, api_key, TOOLS)
+                reminder_message = {"role": "user", "content": build_reminder(DESTRUCTIVE_TOOLS)}
+                stream = chat_stream([system_message] + context + [reminder_message], model, api_key, TOOLS)
 
+                display = StreamDisplay()
                 final_message = None
-                streamed_content = False
 
-                for chunk in stream:
-                    if isinstance(chunk, str):
-                        if not streamed_content:
-                            streamed_content = True
-                            stream_token("   ")
-                        stream_token(chunk)
-                    else:
-                        final_message = chunk
-                        if streamed_content:
-                            print()
+                try:
+                    for chunk in stream:
+                        if isinstance(chunk, str):
+                            display.update(chunk)
+                        else:
+                            final_message = chunk
+                finally:
+                    display.finalize()
 
                 if final_message is None:
                     break
@@ -293,7 +292,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                     for call in final_message["tool_calls"]:
                         try:
-                            result = run_tool(call)
+                            result = run_tool(call, always_allowed)
                             print_tool(f"Done.")
                             context.append({
                                 "role": "tool",

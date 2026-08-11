@@ -1,10 +1,10 @@
-import subprocess
+import re
 from pathlib import Path
 from tools.pathsafe import BASE_PATH, is_safe_path
 
 MAX_RESULTS = 200
 
-EXCLUDED_DIRS = [".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache"]
+EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache"}
 
 GREP_SEARCH_SCHEMA = {
     "type": "function",
@@ -39,6 +39,14 @@ GREP_SEARCH_SCHEMA = {
 }
 
 
+def _should_exclude(entry: Path) -> bool:
+    """Check if any component of the path is in the excluded dirs list."""
+    for part in entry.relative_to(BASE_PATH).parts:
+        if part in EXCLUDED_DIRS:
+            return True
+    return False
+
+
 def grep_search(pattern: str, path: str = ".", case_sensitive: bool = True) -> str:
     if not is_safe_path(path):
         return f"Error: '{path}' is outside the allowed directory"
@@ -51,55 +59,43 @@ def grep_search(pattern: str, path: str = ".", case_sensitive: bool = True) -> s
     if not target.is_dir():
         return f"Error: {path} is not a directory"
 
-    command = ["grep", "-r", "-n", "-I", "-E"]
-
-    if not case_sensitive:
-        command.append("-i")
-
-    for excluded in EXCLUDED_DIRS:
-        command.append(f"--exclude-dir={excluded}")
-
-    command.append("--")
-    command.append(pattern)
-    command.append(str(target))
+    flags = 0 if case_sensitive else re.IGNORECASE
 
     try:
-        result = subprocess.run(
-            command,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-    except FileNotFoundError:
-        return "Error: grep is not installed on this system"
-    except subprocess.TimeoutExpired:
-        return "Error: search timed out"
-    except Exception as e:
-        return f"Error running search: {e}"
+        compiled = re.compile(pattern, flags)
+    except re.error as e:
+        return f"Error: invalid regex pattern: {e}"
 
-    if result.returncode not in (0, 1):
-        return f"Error: grep failed: {result.stderr.strip()}"
+    results: list[str] = []
 
-    if result.returncode == 1:
+    for entry in target.rglob("*"):
+        if not entry.is_file():
+            continue
+        if _should_exclude(entry):
+            continue
+
+        try:
+            text = entry.read_text(errors="replace")
+        except (OSError, PermissionError):
+            continue
+
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if compiled.search(line):
+                rel_path = entry.relative_to(BASE_PATH)
+                results.append(f"{rel_path}:{lineno}:{line}")
+
+                if len(results) >= MAX_RESULTS:
+                    break
+
+        if len(results) >= MAX_RESULTS:
+            break
+
+    if not results:
         return "No matches found"
 
-    lines = result.stdout.splitlines()
+    output = "\n".join(results)
 
-    truncated = len(lines) > MAX_RESULTS
-    lines = lines[:MAX_RESULTS]
-
-    output_lines = []
-    for line in lines:
-        try:
-            abs_path, rest = line.split(":", 1)
-            rel_path = Path(abs_path).relative_to(BASE_PATH)
-            output_lines.append(f"{rel_path}:{rest}")
-        except ValueError:
-            output_lines.append(line)
-
-    output = "\n".join(output_lines)
-
-    if truncated:
+    if len(results) >= MAX_RESULTS:
         output += f"\n... truncated, showing first {MAX_RESULTS} matches"
 
     return output

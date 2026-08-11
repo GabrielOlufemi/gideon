@@ -1,19 +1,20 @@
+import difflib
+import re
+import sys
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.box import Box
 from rich.padding import Padding
 from rich.markdown import Markdown
+from rich.syntax import Syntax
 from rich.table import Table
+from rich.text import Text
 from rich.rule import Rule
+from rich.live import Live
 from rich import box
 
-import re
-import sys
 
-
-from config import get_agent_name
-
-AGENT_NAME = get_agent_name()
 VERSION = "0.1.0"
 
 
@@ -42,26 +43,85 @@ console = Console()
 CODE_INDENT = (0, 0, 0, 5)
 
 def print_user(message: str) -> None:
-    lines_used = (len(f"> {message}") // console.width) + 1
-    for _ in range(lines_used):
-        print("\033[F\033[K", end="")
-
-    console.print(f"> {message}".ljust(console.width), style=COLORS["user_input"])
+    """Print user input, handling multiline messages properly."""
+    lines = message.splitlines()
+    for line in lines:
+        console.print(f"> {line}".ljust(console.width), style=COLORS["user_input"])
+    console.print()
     console.print(Rule(style="dim"))
-    console.print("   Ctrl+C to interrupt  /  / for shortcuts", style=COLORS["tool_detail"])
+    console.print("   Ctrl+C to interrupt", style=COLORS["tool_detail"])
     
 
 def print_top_rule() -> None:
     console.print(Rule(style="dim"))
 
+def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length: int | None) -> None:
+    """Print a compact context usage indicator, Claude-style."""
+    if not context_length or context_length <= 0:
+        return
+
+    total = prompt_tokens + completion_tokens
+    pct = min(100, int((total / context_length) * 100))
+
+    bar_len = 20
+    filled = int((pct / 100) * bar_len)
+    bar = "█" * filled + "░" * (bar_len - filled)
+
+    if pct >= 90:
+        style = "bold red"
+    elif pct >= 75:
+        style = "bold yellow"
+    else:
+        style = "dim"
+
+    console.print(Padding(
+        f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]",
+        (0, 0, 0, 3),
+    ))
+
+
 def print_tool(message: str) -> None:
     console.print(f"   {message}", style=COLORS["tool_detail"])
 
 
-def stream_token(token: str) -> None:
-    """Write a single token to stdout with accent color. Flushes immediately."""
-    console.out(token, end="", style=COLORS["accent"])
-    sys.stdout.flush()
+class StreamDisplay:
+    """Wraps Rich's Live display to render streaming content with Markdown formatting in-place."""
+
+    def __init__(self):
+        self._content = ""
+        self._live = None
+
+    def update(self, token: str) -> None:
+        """Append a token and refresh the rendered display."""
+        self._content += token
+        if not self._content.strip():
+            return
+
+        panel = Padding(
+            Panel(
+                Markdown(self._content),
+                box=LEFT_ONLY,
+                border_style=COLORS["accent"],
+                padding=(0, 1),
+            ),
+            INDENT,
+        )
+
+        if self._live is None:
+            self._live = Live(panel, refresh_per_second=15, transient=False)
+            self._live.start()
+        else:
+            self._live.update(panel)
+
+    def finalize(self) -> None:
+        """Stop the live display, leaving the final renderable on screen."""
+        if self._live is not None:
+            self._live.stop()
+            self._live = None
+
+    @property
+    def content(self) -> str:
+        return self._content
 
 
 def print_reply(message: str) -> None:
@@ -101,6 +161,57 @@ def print_permission(name: str, details: str) -> None:
             box=box.SQUARE,
             expand=False,
             padding=(0, 1),
+        ),
+        INDENT,
+    ))
+    console.print()
+
+
+def print_edit_diff(path: str, old_content: str | None, old_string: str, new_string: str) -> None:
+    """Unified diff for edit_file, Claude Code style."""
+    if old_content is None:
+        return
+
+    # Replace old_string with new_string in the full content
+    modified = old_content.replace(old_string, new_string, 1)
+    if modified == old_content:
+        return  # nothing changed, bail
+
+    old_lines = old_content.splitlines(keepends=True)
+    new_lines = modified.splitlines(keepends=True)
+
+    diff = difflib.unified_diff(
+        old_lines, new_lines,
+        fromfile=f"a/{path}", tofile=f"b/{path}",
+        n=3,
+    )
+
+    diff_text = "".join(diff)
+    if not diff_text.strip():
+        return
+
+    console.print()
+    console.print(
+        Padding(
+            Syntax(diff_text, "diff", line_numbers=False),
+            INDENT,
+        )
+    )
+
+
+def print_write_summary(path: str, old_exists: bool, line_count: int) -> None:
+    """Minimal summary for write_file. No content dump, just path and size."""
+    label = "Overwrite" if old_exists else "New file"
+    console.print()
+    console.print(Padding(
+        Panel(
+            f"{label} — {line_count} lines",
+            title=f"  {path}",
+            title_align="left",
+            border_style=COLORS["accent"],
+            box=box.SQUARE,
+            padding=(0, 1),
+            expand=False,
         ),
         INDENT,
     ))
