@@ -84,6 +84,11 @@ def print_tool(message: str) -> None:
     console.print(f"   {message}", style=COLORS["tool_detail"])
 
 
+def print_tool_summary(name: str, detail: str) -> None:
+    """Print a compact single-line tool summary, Claude Code style."""
+    console.print(f"   [{COLORS['accent']}]{name}:[/{COLORS['accent']}] {detail}")
+
+
 class StreamDisplay:
     """Wraps Rich's Live display to render streaming content with Markdown formatting in-place."""
 
@@ -224,14 +229,14 @@ def print_welcome(cwd: str) -> None:
     left = (
         f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
         # "No model selected yet"
-        "\n\n[bold]/settings[/bold] [dim]to access configuration"
+        "\n\n[bold]/commands[/bold] [dim]to view all commands"
     )
 
     right = (
         "[bold]Setup[/bold]\n"
         "1. Choose a model\n"
         "2. Add your OpenRouter key\n\n"
-        "[bold]Who is Gideon?[/bold] \nHey, I'm Gideon, gabriel's alter ego (sort of) and "
+        "[bold]Who is Gideon?[/bold] \nhey, i'm gideon, gabriel's alter ego (sort of) and "
         "your terminal coding agent. Point me at a problem and I'll "
         "poke through your codebase, run commands and do the heavy lifting while you sit back and relax."
         " I'll simply check with you first before doing anything permanent."

@@ -4,7 +4,7 @@ from config import load_config
 
 # scaffolding stuff
 from pathlib import Path
-from session_manager import save_session, list_sessions, new_session_path, load_session
+from session_manager import save_session, list_sessions, new_session_path, load_session, delete_session
 
 # normal config imports
 from config import get_agent_name
@@ -12,7 +12,7 @@ from config import get_agent_name
 # color config imports 
 from display import (
     print_error, StreamDisplay, print_edit_diff, print_write_summary, print_context_bar,
-    print_tool, print_permission, print_user,
+    print_tool, print_tool_summary, print_permission, print_user,
     print_top_rule, print_info, print_success, console, COLORS
 )
 
@@ -38,7 +38,23 @@ from system_prompt import build_system_prompt, build_reminder
 from commands.settings import open_settings
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/settings", "/sessions", "/restore"]
+CONSOLE_COMMANDS = ["/commands", "/settings", "/sessions", "/restore", "/delete"]
+
+
+def _line_count(text: str) -> int:
+    """Count lines matching standard editor behavior (wc -l style)."""
+    if not text:
+        return 0
+    return text.count("\n") + 1
+
+
+COMMANDS_TEXT = """\
+  [bold]/commands[/bold]                  View all commands
+  [bold]/settings[/bold]                  Open settings menu
+  [bold]/sessions[/bold]                  List all sessions for this project
+  [bold]/restore[/bold] [dim]<number>[/dim]         Restore a previous session
+  [bold]/delete[/bold] [dim]<number>[/dim]          Delete a session
+  [bold]quit[/bold], [bold]exit[/bold], [bold]leave[/bold]         End the session"""
 
 # tool exec logic
 def run_tool(call, always_allowed: list[str]):
@@ -58,28 +74,39 @@ def run_tool(call, always_allowed: list[str]):
 
 
     if name == "read_file":
-        # tool call print
-        print_tool(f"Reading {arguments["path"]}...")
-        return read_file(arguments["path"])
+        result = read_file(arguments["path"])
+        line_count = _line_count(result) if result and not result.startswith("Error") else 0
+        print_tool_summary("read_file", f"{arguments['path']} ({line_count} lines)")
+        return result
 
 
     if name == "write_file":
-        print_tool(f"Writing to {arguments["path"]}...")
-        return write_file(arguments["path"], arguments["content"])
+        path = arguments["path"]
+        content = arguments["content"]
+        lines = _line_count(content)
+        result = write_file(path, content)
+        print_tool_summary("write_file", f"{path} ({lines} lines)")
+        return result
 
 
     if name == "list_directories":
-        print_tool(f"Listing {arguments["dir_path"]}...")
-        return list_directories(arguments["dir_path"])
-    
+        result = list_directories(arguments["dir_path"])
+        if result.startswith("Error"):
+            print_tool_summary("list_directories", f"{arguments['dir_path']} — error")
+        else:
+            entries = [e for e in result.splitlines() if e != "empty(directory)"]
+            print_tool_summary("list_directories", f"{arguments['dir_path']} ({len(entries)} entries)")
+        return result
+
     if name == "run_bash":
-        # added this to remove that redundant command display after run-bash already displays this 
-        # print_tool(f"Executing command:  {arguments["command"]}")
-        return run_bash(arguments["command"])
+        cmd = arguments["command"]
+        print_tool_summary("run_bash", cmd)
+        result = run_bash(cmd)
+        return result
 
     if name == "edit_file":
-        print_tool(f"Editing {arguments["path"]}...")
         path = arguments["path"]
+        print_tool_summary("edit_file", path)
         old_string = arguments["old_string"]
         new_string = arguments["new_string"]
         replace_all = arguments.get("replace_all", False)
@@ -96,12 +123,16 @@ def run_tool(call, always_allowed: list[str]):
         return result
 
     if name == "grep_search":
-        print_tool(f"Searching for: {arguments["pattern"]}...")
-        return grep_search(
+        print_tool_summary("grep_search", f"{arguments['pattern']}")
+        result = grep_search(
             arguments["pattern"],
             arguments.get("path", "."),
             arguments.get("case_sensitive", True)
         )
+        match_count = len(result.splitlines()) if result and not result.startswith("No") and not result.startswith("Error") else 0
+        if match_count:
+            print_tool_summary("grep_search", f"{match_count} matches")
+        return result
 
     return f"Error: unknown tool '{name}'"
 
@@ -123,7 +154,7 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         path = arguments.get("path", "")
         old_content = _read_file_content(path)
         new_content = arguments.get("content", "")
-        line_count = len(new_content.splitlines()) if new_content else 0
+        line_count = _line_count(new_content) if new_content else 0
         print_write_summary(path, old_content is not None, line_count)
 
     if name == "edit_file":
@@ -218,6 +249,13 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
         if cmd in CONSOLE_COMMANDS:
 
+            if cmd == "/commands":
+                console.print()
+                for line in COMMANDS_TEXT.splitlines():
+                    console.print(f"   {line}")
+                console.print()
+                continue
+
             if cmd == "/settings":
                 open_settings()
                 continue
@@ -235,12 +273,19 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
             if cmd == "/restore":
                 if len(cmd_parts) < 2:
-                    print_error("Usage: /restore <session_number>")
+                    sessions = list_sessions(session_dir)
+                    if not sessions:
+                        print_error("No sessions to restore.")
+                        continue
+                    lines = []
+                    for i, s in enumerate(sessions, start=1):
+                        lines.append(f"{i}. {s['display']}")
+                    print_info(["Usage: /restore <number>"] + lines)
                     continue
                 try:
                     session_num = int(cmd_parts[1])
                 except ValueError:
-                    print_error("Usage: /restore <session_number>")
+                    print_error("Usage: /restore <number>. Use /sessions to list them.")
                     continue
 
                 sessions = list_sessions(session_dir)
@@ -252,6 +297,33 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 context = load_session(target["path"])
                 session_path = new_session_path(session_dir)
                 print_success(f"Restored from {target['display']} in a new session.")
+                continue
+
+            if cmd == "/delete":
+                if len(cmd_parts) < 2:
+                    sessions = list_sessions(session_dir)
+                    if not sessions:
+                        print_error("No sessions to delete.")
+                        continue
+                    lines = []
+                    for i, s in enumerate(sessions, start=1):
+                        lines.append(f"{i}. {s['display']}")
+                    print_info(["Usage: /delete <number>"] + lines)
+                    continue
+                try:
+                    session_num = int(cmd_parts[1])
+                except ValueError:
+                    print_error("Usage: /delete <number>. Use /sessions to list them.")
+                    continue
+
+                sessions = list_sessions(session_dir)
+                if session_num < 1 or session_num > len(sessions):
+                    print_error(f"Session {session_num} not found. Use /sessions to list them.")
+                    continue
+
+                target = sessions[session_num - 1]
+                delete_session(target["path"])
+                print_success(f"Deleted session from {target['display']}.")
                 continue
 
 
@@ -293,7 +365,6 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                     for call in final_message["tool_calls"]:
                         try:
                             result = run_tool(call, always_allowed)
-                            print_tool(f"Done.")
                             context.append({
                                 "role": "tool",
                                 "tool_call_id": call["id"],
@@ -315,7 +386,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 })
 
                 # saving turn to session log
-                save_session(session_path, context)
+                save_session(session_path, context, model)
 
                 break
 
