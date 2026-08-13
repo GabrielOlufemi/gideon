@@ -209,23 +209,22 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
     api_key = load_config()["openrouter_api_key"]
     always_allowed: list[str] = []
 
-    # Build prompt_toolkit session with multiline keybinds
+    # Build prompt_toolkit session — single-line input keeps the UI clean
+    # when pasting large blocks. Pasted content is captured entirely but
+    # only the first line shows in the prompt area — "Pasted +X lines"
+    # below tells you how much was actually submitted.
     kb = KeyBindings()
 
+    @kb.add("escape", "enter")
     @kb.add("enter")
     def _(event):
-        """Enter submits the input."""
+        """Enter or Alt+Enter submits the input."""
         event.current_buffer.validate_and_handle()
-
-    @kb.add("escape", "enter")
-    def _(event):
-        """Alt+Enter inserts a newline (pasting multiline text also works natively)."""
-        event.current_buffer.insert_text("\n")
 
     prompt_session = PromptSession(
         "> ",
         key_bindings=kb,
-        multiline=True,
+        multiline=False,
         history=None,
         enable_history_search=False,
         mouse_support=False,
@@ -237,16 +236,17 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
         try:
             user_input = prompt_session.prompt()
+            # Clean up control characters from pasted input
+            user_input = user_input.replace("\t", "    ").replace("\r", "")
         except (KeyboardInterrupt, EOFError):
             print()
-            break
+            console.print("   Cancelled. Type quit/exit/leave to end the session.", style=COLORS["tool_detail"])
+            continue
 
-        # prompt_toolkit already displays the "> input" on screen —
-        # just print a summary and the shortcut bar below it
         line_count = len(user_input.splitlines())
         if line_count > 1:
             console.print(f"   [Pasted +{line_count} lines]", style=COLORS["tool_detail"])
-        console.print("   Alt+Enter for newline  |  Ctrl+C to interrupt", style=COLORS["tool_detail"])
+        console.print("   Ctrl+C to interrupt", style=COLORS["tool_detail"])
 
         # check if input is a console command
         cmd_parts = user_input.strip().split()
@@ -352,7 +352,12 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 reminder_message = {"role": "user", "content": build_reminder(DESTRUCTIVE_TOOLS)}
 
                 display = StreamDisplay(status="Thinking...")
-                stream = chat_stream([system_message] + context + [reminder_message], model, api_key, TOOLS)
+
+                try:
+                    stream = chat_stream([system_message] + context + [reminder_message], model, api_key, TOOLS)
+                except KeyboardInterrupt:
+                    print_error("Cancelled.")
+                    break
 
                 final_message = None
 
@@ -362,6 +367,14 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                             display.update(chunk)
                         else:
                             final_message = chunk
+                except KeyboardInterrupt:
+                    display.finalize()
+                    print_error("Cancelled.")
+                    break
+                except Exception as e:
+                    display.finalize()
+                    print_error(f"Error: {e}")
+                    break
                 finally:
                     display.finalize()
 
@@ -379,6 +392,9 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                                 "tool_call_id": call["id"],
                                 "content": result
                             })
+                        except KeyboardInterrupt:
+                            print_error("Cancelled.")
+                            break
                         except Exception as e:
                             context.append({
                                 "role": "tool",
@@ -399,7 +415,9 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                 break
 
+        except KeyboardInterrupt:
+            print_error("Cancelled.")
+            continue
         except Exception as e:
-            # error print
             print_error(f"Error: {e}")
             continue
