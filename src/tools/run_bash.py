@@ -27,9 +27,17 @@ RUN_BASH_SCHEMA = {
                         "'pip install requests'). Multiple commands can be chained "
                         "with '&&' or ';'."
                     )
+                },
+                "description": {
+                    "type": "string",
+                    "description": (
+                        "A very brief 1-2 sentence explanation of what this "
+                        "command does and why it's being run. Helps the user "
+                        "understand what they're approving."
+                    )
                 }
             },
-            "required": ["command"]
+            "required": ["command", "description"]
         }
     }
 }

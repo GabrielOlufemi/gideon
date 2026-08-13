@@ -100,6 +100,9 @@ def run_tool(call, always_allowed: list[str]):
 
     if name == "run_bash":
         cmd = arguments["command"]
+        desc = arguments.get("description")
+        if desc:
+            print_tool_summary("run_bash", f"{desc}")
         print_tool_summary("run_bash", cmd)
         result = run_bash(cmd)
         return result
@@ -170,7 +173,12 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
     elif name == "edit_file":
         details = f"path: {arguments.get('path')}"
     elif name == "run_bash":
-        details = f"command: {arguments.get('command')}"
+        desc = arguments.get("description")
+        cmd = arguments.get("command", "")
+        if desc:
+            details = f"[dim]{desc}[/dim]\ncommand: {cmd}"
+        else:
+            details = f"command: {cmd}"
     else:
         details = f"arguments: {arguments}"
 
@@ -342,9 +350,10 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
             while True:
                 system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
                 reminder_message = {"role": "user", "content": build_reminder(DESTRUCTIVE_TOOLS)}
+
+                display = StreamDisplay(status="Thinking...")
                 stream = chat_stream([system_message] + context + [reminder_message], model, api_key, TOOLS)
 
-                display = StreamDisplay()
                 final_message = None
 
                 try:

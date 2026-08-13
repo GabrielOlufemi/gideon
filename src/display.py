@@ -20,7 +20,7 @@ VERSION = "0.1.0"
 
 COLORS = {
     "user_input": "on grey19",
-    "accent": "#55821A",
+    "accent": "#239054",
     "tool_detail": "dim",
     "reply": "default",
     "error": "#FF4444",
@@ -90,11 +90,52 @@ def print_tool_summary(name: str, detail: str) -> None:
 
 
 class StreamDisplay:
-    """Wraps Rich's Live display to render streaming content with Markdown formatting in-place."""
+    """Wraps Rich's Live display to render streaming content with Markdown.
 
-    def __init__(self):
+    Shows an optional status message (e.g. "Thinking...") before content arrives.
+    The status is replaced seamlessly when the first content token comes in.
+    """
+
+    def __init__(self, status: str | None = None):
         self._content = ""
         self._live = None
+        self._status = status
+        self._has_content = False
+
+        if status:
+            # Show the status panel immediately
+            self._show_status()
+
+    def _show_status(self) -> None:
+        """Render the status message as a dim panel."""
+        panel = Padding(
+            Panel(
+                Text(self._status, style="dim"),
+                box=LEFT_ONLY,
+                border_style=COLORS["accent"],
+                padding=(0, 1),
+            ),
+            INDENT,
+        )
+        self._live = Live(panel, refresh_per_second=15, transient=False)
+        self._live.start()
+
+    def _show_content(self) -> None:
+        """Switch from status to content renderable."""
+        panel = Padding(
+            Panel(
+                Markdown(self._content, code_theme="monokai"),
+                box=LEFT_ONLY,
+                border_style=COLORS["accent"],
+                padding=(0, 1),
+            ),
+            INDENT,
+        )
+        if self._live is None:
+            self._live = Live(panel, refresh_per_second=15, transient=False)
+            self._live.start()
+        else:
+            self._live.update(panel)
 
     def update(self, token: str) -> None:
         """Append a token and refresh the rendered display."""
@@ -102,20 +143,19 @@ class StreamDisplay:
         if not self._content.strip():
             return
 
-        panel = Padding(
-            Panel(
-                Markdown(self._content),
-                box=LEFT_ONLY,
-                border_style=COLORS["accent"],
-                padding=(0, 1),
-            ),
-            INDENT,
-        )
-
-        if self._live is None:
-            self._live = Live(panel, refresh_per_second=15, transient=False)
-            self._live.start()
+        if not self._has_content:
+            self._has_content = True
+            self._show_content()
         else:
+            panel = Padding(
+                Panel(
+                    Markdown(self._content, code_theme="monokai"),
+                    box=LEFT_ONLY,
+                    border_style=COLORS["accent"],
+                    padding=(0, 1),
+                ),
+                INDENT,
+            )
             self._live.update(panel)
 
     def finalize(self) -> None:
@@ -137,11 +177,11 @@ def print_reply(message: str) -> None:
             continue
 
         if part.startswith("```"):
-            console.print(Padding(Markdown(part), CODE_INDENT))
+            console.print(Padding(Markdown(part, code_theme="monokai"), CODE_INDENT))
         else:
             console.print(Padding(
                 Panel(
-                    Markdown(part.strip()),
+                    Markdown(part.strip(), code_theme="monokai"),
                     box=LEFT_ONLY,
                     border_style=COLORS["accent"],
                     expand=False,
