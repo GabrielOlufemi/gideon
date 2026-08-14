@@ -5,6 +5,9 @@ from tools.write_file import write_file, WRITE_FILE_SCHEMA
 from tools.run_bash import run_bash, RUN_BASH_SCHEMA
 from tools.edit_file import edit_file, EDIT_FILE_SCHEMA
 from tools.grep_search import grep_search, GREP_SEARCH_SCHEMA
+from tools.read_file_range import read_file_range, READ_FILE_RANGE_SCHEMA
+from tools.move_file import move_file, MOVE_FILE_SCHEMA
+from tools.find_files import find_files, FIND_FILES_SCHEMA
 
 from config import load_config
 
@@ -14,10 +17,13 @@ TOOLS = [
     LIST_DIRECTORIES_SCHEMA,
     RUN_BASH_SCHEMA, 
     EDIT_FILE_SCHEMA,
-    GREP_SEARCH_SCHEMA
+    GREP_SEARCH_SCHEMA,
+    READ_FILE_RANGE_SCHEMA,
+    MOVE_FILE_SCHEMA,
+    FIND_FILES_SCHEMA,
 ]
 
-DESTRUCTIVE_TOOLS = ["write_file", "run_bash", "edit_file"]
+DESTRUCTIVE_TOOLS = ["write_file", "run_bash", "edit_file", "move_file"]
 
 
 def get_model() -> str:

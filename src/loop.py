@@ -30,6 +30,9 @@ from tools.list_directories import list_directories
 from tools.run_bash import run_bash
 from tools.edit_file import edit_file
 from tools.grep_search import grep_search
+from tools.read_file_range import read_file_range
+from tools.move_file import move_file
+from tools.find_files import find_files
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 from tools.pathsafe import BASE_PATH
@@ -40,14 +43,13 @@ from commands.settings import open_settings
 
 STATUS_WORDS = [
     "Thinking", "Juxtaposing", "Reasoning", "Analysing", "Gideon-ing",
-    "Pondering", "Deliberating", "Contemplating", "Ruminating", "Examining",
     "Scrutinising", "Gideon-ing", "Deconstructing", "Formulating", "Gideon-ing",
     "Connecting", "Tracing", "Inspecting", "Dissecting", "Evaluating",
 ]
 
 
 def _random_status() -> str:
-    return random.choice(STATUS_WORDS)
+    return f"{random.choice(STATUS_WORDS)}..."
 
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
@@ -153,6 +155,30 @@ def run_tool(call, always_allowed: list[str]):
             print_tool_summary("grep_search", f"{match_count} matches")
         return result
 
+    if name == "read_file_range":
+        path = arguments["path"]
+        start_line = arguments.get("start_line", 1)
+        end_line = arguments.get("end_line", None)
+        result = read_file_range(path, start_line, end_line)
+        line_count = _line_count(result) if result and not result.startswith("Error") else 0
+        print_tool_summary("read_file_range", f"{path} (lines {start_line}-{end_line or 'end'}, {line_count} lines)")
+        return result
+
+    if name == "move_file":
+        source = arguments["source"]
+        destination = arguments["destination"]
+        result = move_file(source, destination)
+        print_tool_summary("move_file", f"{source} -> {destination}")
+        return result
+
+    if name == "find_files":
+        pattern = arguments["pattern"]
+        search_path = arguments.get("path", ".")
+        result = find_files(pattern, search_path)
+        match_count = len(result.splitlines()) if result and not result.startswith("No") and not result.startswith("Error") else 0
+        print_tool_summary("find_files", f"pattern: '{pattern}' ({match_count} matches)")
+        return result
+
     return f"Error: unknown tool '{name}'"
 
 
@@ -195,6 +221,8 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
             details = f"[dim]{desc}[/dim]\ncommand: {cmd}"
         else:
             details = f"command: {cmd}"
+    elif name == "move_file":
+        details = f"source: {arguments.get('source')}\ndestination: {arguments.get('destination')}"
     else:
         details = f"arguments: {arguments}"
 

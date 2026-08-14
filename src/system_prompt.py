@@ -1,5 +1,5 @@
 def build_reminder(destructive_tools: list[str]) -> str:
-    free_tools = ["read_file", "list_directories", "grep_search"]
+    free_tools = ["read_file", "read_file_range", "list_directories", "grep_search", "find_files"]
     approved_tools = ", ".join(destructive_tools)
 
     return f"""<reminder>
