@@ -1,6 +1,6 @@
-# Gideon
+# gideon
 
-A coding agent that lives in your terminal. Point it at a project and it'll read files, search your codebase, run commands, and make edits, checking with you first before doing anything permanent.
+A model agnostic coding agent that lives in your terminal. Point it at a project and it'll read files, search your codebase, run commands, and make edits, checking with you first before doing anything permanent.
 
 > Demo video coming soon.
 
@@ -18,7 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/instal
 irm https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/install.ps1 | iex
 ```
 
-That's it. Gideon is bundled as a standalone binary — no Python, no dependencies. Supports Linux, macOS (Intel + Apple Silicon), and Windows.
+That's it, Gideon is bundled as a standalone binary. Supports Linux, macOS (Intel + Apple Silicon), and Windows.
 
 <details>
 <summary>Build from source</summary>
