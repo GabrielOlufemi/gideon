@@ -1,0 +1,74 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build:
+    name: Build ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+            arch: x86_64
+          - os: macos-latest
+            platform: darwin
+            arch: x86_64
+          - os: macos-latest
+            platform: darwin
+            arch: arm64
+          - os: windows-latest
+            platform: windows
+            arch: x86_64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install pyinstaller
+      - run: pip install -e .
+
+      - name: Build binary
+        run: pyinstaller --onefile --name gideon --distpath dist --clean --noconfirm src/gideon/main.py
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            mv dist/gideon.exe "dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}.exe"
+          else
+            mv dist/gideon "dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}"
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gideon-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: gideon-*
+          merge-multiple: true
+
+      - run: ls -lh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            gideon-linux-*
+            gideon-darwin-*
+            gideon-windows-*
+          generate_release_notes: true
