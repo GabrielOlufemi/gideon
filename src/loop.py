@@ -1,4 +1,5 @@
 import json
+import random
 from openrouter import chat_stream
 from config import load_config
 
@@ -32,10 +33,22 @@ from tools.grep_search import grep_search
 from tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 from tools.pathsafe import BASE_PATH
-from system_prompt import build_system_prompt, build_reminder
+from system_prompt import build_system_prompt
 
 # commands stuff
 from commands.settings import open_settings
+
+STATUS_WORDS = [
+    "Thinking", "Juxtaposing", "Reasoning", "Analysing", "Gideon-ing",
+    "Pondering", "Deliberating", "Contemplating", "Ruminating", "Examining",
+    "Scrutinising", "Gideon-ing", "Deconstructing", "Formulating", "Gideon-ing",
+    "Connecting", "Tracing", "Inspecting", "Dissecting", "Evaluating",
+]
+
+
+def _random_status() -> str:
+    return random.choice(STATUS_WORDS)
+
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
 CONSOLE_COMMANDS = ["/commands", "/settings", "/sessions", "/restore", "/delete"]
@@ -65,12 +78,14 @@ def run_tool(call, always_allowed: list[str]):
     except json.JSONDecodeError as e:
         return f"Error: malformed arguments for '{name}' : {e}"
 
+    permission_shown = False
     if name in DESTRUCTIVE_TOOLS and name not in always_allowed:
         decision = request_permission(name, arguments)
         if decision == "no":
             return f"Permission denied by user for '{name}'"
         if decision == "always":
             always_allowed.append(name)
+        permission_shown = True
 
 
     if name == "read_file":
@@ -101,9 +116,10 @@ def run_tool(call, always_allowed: list[str]):
     if name == "run_bash":
         cmd = arguments["command"]
         desc = arguments.get("description")
-        if desc:
-            print_tool_summary("run_bash", f"{desc}")
-        print_tool_summary("run_bash", cmd)
+        if not permission_shown:
+            if desc:
+                print_tool_summary("run_bash", f"{desc}")
+            print_tool_summary("run_bash", cmd)
         result = run_bash(cmd)
         return result
 
@@ -215,16 +231,20 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
     # below tells you how much was actually submitted.
     kb = KeyBindings()
 
-    @kb.add("escape", "enter")
     @kb.add("enter")
     def _(event):
-        """Enter or Alt+Enter submits the input."""
+        """Enter submits the input."""
         event.current_buffer.validate_and_handle()
+
+    @kb.add("escape", "enter")
+    def _(event):
+        """Alt+Enter / Escape+Enter inserts a newline."""
+        event.current_buffer.insert_text("\n")
 
     prompt_session = PromptSession(
         "> ",
         key_bindings=kb,
-        multiline=False,
+        multiline=True,
         history=None,
         enable_history_search=False,
         mouse_support=False,
@@ -349,12 +369,11 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
             while True:
                 system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
-                reminder_message = {"role": "user", "content": build_reminder(DESTRUCTIVE_TOOLS)}
 
-                display = StreamDisplay(status="Thinking...")
+                display = StreamDisplay(status=_random_status())
 
                 try:
-                    stream = chat_stream([system_message] + context + [reminder_message], model, api_key, TOOLS)
+                    stream = chat_stream([system_message] + context, model, api_key, TOOLS)
                 except KeyboardInterrupt:
                     print_error("Cancelled.")
                     break
