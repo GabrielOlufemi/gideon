@@ -1,16 +1,24 @@
 # Gideon
 
-A coding agent that lives in your terminal. Point it at a project and it'll read files, search your codebase, run commands, and make edits — checking with you first before doing anything permanent.
+A coding agent that lives in your terminal. Point it at a project and it'll read files, search your codebase, run commands, and make edits, checking with you first before doing anything permanent.
 
 > Demo video coming soon.
 
 ## Install
 
+**Linux / macOS**
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/install.sh | sh
 ```
 
-That's it. Gideon is bundled as a standalone binary — no Python, no dependencies. Supports Linux, macOS (Intel + Apple Silicon), and Windows (via WSL or the `.exe` from [releases](https://github.com/GabrielOlufemi/gideon/releases)).
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/install.ps1 | iex
+```
+
+That's it. Gideon is bundled as a standalone binary — no Python, no dependencies. Supports Linux, macOS (Intel + Apple Silicon), and Windows.
 
 <details>
 <summary>Build from source</summary>
@@ -34,8 +42,8 @@ To build the standalone binary yourself:
 ## Quick start
 
 1. Run `gideon` in any project directory
-2. Enter your OpenRouter API key — it walks you through this on first run
-3. Pick a model
+2. Enter your OpenRouter API key, it walks you through this on first run
+3. Pick a model [I recommend Deepseek V4 flash]
 
 Then just talk to it. It knows what's in your project and can act on it.
 
@@ -75,7 +83,8 @@ src/gideon/          # package source
   commands/          # slash commands (/config, etc.)
   system_prompt.py   # the prompt that shapes the agent
 build.sh             # builds the standalone binary
-install.sh           # the curl | sh installer
+install.sh           # the curl | sh installer (Linux/macOS)
+install.ps1          # the irm | iex installer (Windows)
 .github/workflows/   # CI — builds release binaries on tag
 ```
 
