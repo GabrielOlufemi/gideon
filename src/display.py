@@ -270,6 +270,8 @@ def print_welcome(cwd: str) -> None:
         f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
         # "No model selected yet"
         "\n\n[bold]/commands[/bold] [dim]to view all commands"
+        "\n[bold]/exit[/bold] [dim]to leave interface"
+
     )
 
     right = (

@@ -8,7 +8,7 @@ from pathlib import Path
 from session_manager import save_session, list_sessions, new_session_path, load_session, delete_session
 
 # normal config imports
-from config import get_agent_name
+from config import get_agent_name, get_context_length
 
 # color config imports 
 from display import (
@@ -39,12 +39,12 @@ from tools.pathsafe import BASE_PATH
 from system_prompt import build_system_prompt
 
 # commands stuff
-from commands.settings import open_settings
+from commands.config import open_config
 
 STATUS_WORDS = [
     "Thinking", "Juxtaposing", "Reasoning", "Analysing", "Gideon-ing",
     "Scrutinising", "Gideon-ing", "Deconstructing", "Formulating", "Gideon-ing",
-    "Connecting", "Tracing", "Inspecting", "Dissecting", "Evaluating",
+    # "Connecting", "Tracing", "Inspecting", "Dissecting", "Evaluating",
 ]
 
 
@@ -53,7 +53,7 @@ def _random_status() -> str:
 
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/commands", "/settings", "/sessions", "/restore", "/delete"]
+CONSOLE_COMMANDS = ["/commands", "/config", "/sessions", "/restore", "/delete"]
 
 
 def _line_count(text: str) -> int:
@@ -65,7 +65,7 @@ def _line_count(text: str) -> int:
 
 COMMANDS_TEXT = """\
   [bold]/commands[/bold]                  View all commands
-  [bold]/settings[/bold]                  Open settings menu
+  [bold]/config[/bold]                  Open config menu
   [bold]/sessions[/bold]                  List all sessions for this project
   [bold]/restore[/bold] [dim]<number>[/dim]         Restore a previous session
   [bold]/delete[/bold] [dim]<number>[/dim]          Delete a session
@@ -312,8 +312,8 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 console.print()
                 continue
 
-            if cmd == "/settings":
-                open_settings()
+            if cmd == "/config":
+                open_config()
                 continue
 
             if cmd == "/sessions":
@@ -459,6 +459,17 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                 # saving turn to session log
                 save_session(session_path, context, model)
+
+                # Show context usage bar after the final reply
+                usage = final_message.get("usage")
+                if usage:
+                    ctx_len = get_context_length()
+                    if ctx_len:
+                        print_context_bar(
+                            usage.get("prompt_tokens", 0),
+                            usage.get("completion_tokens", 0),
+                            ctx_len,
+                        )
 
                 break
 

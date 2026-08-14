@@ -9,10 +9,10 @@ from display import print_success, print_error, print_info
 import questionary
 
 
-def open_settings() -> None:
+def open_config() -> None:
     """
     Entry point, called from loop.py when the user types exactly
-    '/settings' at the chat prompt. Presents a menu, dispatches to
+    '/config' at the chat prompt. Presents a menu, dispatches to
     the chosen action, then returns control back to the caller once
     done or cancelled — mirrors how run_onboarding() owns its own
     flow and just returns when finished.
@@ -26,7 +26,7 @@ def open_settings() -> None:
     ]
 
     try:
-        choice = select_choice("Settings", choices)
+        choice = select_choice("Config", choices)
     except PickerCancelled:
         return
     

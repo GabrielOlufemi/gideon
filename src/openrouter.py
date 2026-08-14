@@ -48,120 +48,14 @@ def chat(messages: list[dict], model: str, api_key: str, tools: list[dict] = Non
         raise NetworkError("Could not reach OpenRouter")
 
 
-# def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict] = None):
-    """Stream a chat completion. Yields content tokens as strings, then yields the final message dict."""
-
-    body = {
-        "model": model,
-        "messages": messages,
-        "stream": True
-    }
-
-    if tools:
-        body["tools"] = tools
-
-    with httpx.Client(timeout=TIMEOUT) as client:
-        try:
-            with client.stream(
-                "POST",
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                },
-                data=json.dumps(body),
-            ) as response:
-
-                if response.status_code == 401:
-                    raise AuthError("API key rejected")
-                if response.status_code == 402:
-                    raise NoCreditsError("Insufficient credits")
-
-                content_so_far = ""
-                tool_calls_by_index = {}
-                usage = None
-
-                for line in response.iter_lines():
-                    if not line.startswith("data: "):
-                        continue
-
-                    data_str = line[6:].strip()
-                    if data_str == "[DONE]":
-                        break
-
-                    try:
-                        chunk = json.loads(data_str)
-                    except json.JSONDecodeError:
-                        continue
-
-                    choice = chunk["choices"][0]
-                    delta = choice.get("delta", {})
-                    finish_reason = choice.get("finish_reason")
-
-                    # Capture usage from the chunk if present (OpenRouter includes it
-                    # in the final streaming chunk alongside finish_reason)
-                    if "usage" in chunk:
-                        usage = chunk["usage"]
-
-                    # Content tokens
-                    content = delta.get("content")
-                    if content:
-                        content_so_far += content
-                        yield content
-
-                    # Tool call deltas — accumulate by index
-                    tool_calls = delta.get("tool_calls")
-                    if tool_calls:
-                        for tc in tool_calls:
-                            idx = tc["index"]
-                            if idx not in tool_calls_by_index:
-                                tool_calls_by_index[idx] = {
-                                    "id": tc.get("id", ""),
-                                    "type": tc.get("type", "function"),
-                                    "function": {"name": "", "arguments": ""}
-                                }
-                            acc = tool_calls_by_index[idx]
-                            if tc.get("id"):
-                                acc["id"] = tc["id"]
-                            if tc.get("type"):
-                                acc["type"] = tc["type"]
-                            if "function" in tc:
-                                if tc["function"].get("name"):
-                                    acc["function"]["name"] += tc["function"]["name"]
-                                if tc["function"].get("arguments"):
-                                    acc["function"]["arguments"] += tc["function"]["arguments"]
-
-                    # Stream finished — yield the complete message
-                    if finish_reason:
-                        message = {
-                            "role": "assistant",
-                            "content": content_so_far or None
-                        }
-                        if tool_calls_by_index:
-                            message["tool_calls"] = [
-                                tool_calls_by_index[i]
-                                for i in sorted(tool_calls_by_index.keys())
-                            ]
-                        if usage:
-                            message["usage"] = {
-                                "prompt_tokens": usage.get("prompt_tokens", 0),
-                                "completion_tokens": usage.get("completion_tokens", 0),
-                            }
-                        yield message
-                        break
-
-        except httpx.TimeoutException:
-            raise NetworkError("Request to OpenRouter timed out. Try again in a moment")
-        except httpx.ConnectError:
-            raise NetworkError("Could not reach OpenRouter")
-
-
 def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict] = None):
     """Stream a chat completion. Yields content tokens as strings, then yields the final message dict."""
 
     body = {
         "model": model,
         "messages": messages,
-        "stream": True
+        "stream": True,
+        "stream_options": {"include_usage": True},
     }
 
     if tools:
@@ -189,6 +83,7 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                 tool_calls_by_index = {}
                 usage = None
                 has_tool_calls = False
+                message_yielded = False
 
                 for line in response.iter_lines():
                     if not line:
@@ -242,8 +137,12 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                                 if tc["function"].get("arguments"):
                                     acc["function"]["arguments"] += tc["function"]["arguments"]
 
-                    # Stream finished — yield the complete message
-                    if finish_reason:
+                    # Stream finished — yield the message now, but keep the
+                    # outer loop running so we capture the usage chunk that some
+                    # providers (DeepSeek) send AFTER finish_reason. Yielding
+                    # pauses the generator; the stream stays open until [DONE].
+                    if finish_reason and not message_yielded:
+                        message_yielded = True
                         message = {
                             "role": "assistant",
                             "content": content_so_far or None
@@ -260,7 +159,10 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                                 "completion_tokens": usage.get("completion_tokens", 0),
                             }
                         yield message
-                        return  # Exit after yielding the final message
+                        if usage:
+                            return  # Already have usage, stop early
+                        # No usage yet — keep the outer loop reading the
+                        # remaining lines so the trailing usage chunk lands.
 
                 # If we never got a finish_reason, yield what we have anyway
                 if content_so_far or tool_calls_by_index:
