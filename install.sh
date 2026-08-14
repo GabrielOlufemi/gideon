@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Gideon installer & updater
-# Usage: curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/main/install.sh | sh
-#        curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/main/install.sh | sh -s v0.2.0
+# Usage: curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/install.sh | sh
+#        curl -fsSL https://raw.githubusercontent.com/GabrielOlufemi/gideon/master/install.sh | sh -s v0.2.0
 
 NAME="gideon"
 REPO="GabrielOlufemi/gideon"
