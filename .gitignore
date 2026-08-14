@@ -1,3 +1,7 @@
 .env
 __pycache__/
 .venv/
+src_gideon_backup/
+dist/
+build/
+*.egg-info
