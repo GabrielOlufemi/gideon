@@ -56,8 +56,9 @@ case ":$PATH:" in
                 ;;
         esac
 
-        if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
+        if [ -n "$SHELL_CONFIG" ]; then
             echo "Adding $INSTALL_DIR to PATH in $SHELL_CONFIG..."
+            touch "$SHELL_CONFIG"
             echo "" >> "$SHELL_CONFIG"
             echo "# Added by gideon installer" >> "$SHELL_CONFIG"
             echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$SHELL_CONFIG"
