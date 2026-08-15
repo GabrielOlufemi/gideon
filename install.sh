@@ -43,16 +43,35 @@ fi
 chmod +x "$INSTALL_DIR/$NAME"
 echo "Installed to $INSTALL_DIR/$NAME"
 
-# Check if INSTALL_DIR is on PATH
+# Check if INSTALL_DIR is on PATH, and add it automatically if not
 case ":$PATH:" in
-    *":$INSTALL_DIR:"*) ;;
+    *":$INSTALL_DIR:"*)
+        ;;
     *)
-        echo ""
-        echo "  $INSTALL_DIR is not on your PATH."
-        echo "  Add it to your shell config:"
-        echo ""
-        echo "    export PATH=\"\$PATH:$INSTALL_DIR\""
-        echo ""
+        SHELL_CONFIG=""
+        case "$SHELL" in
+            */zsh) SHELL_CONFIG="$HOME/.zshrc" ;;
+            */bash)
+                [ "$OS" = "darwin" ] && SHELL_CONFIG="$HOME/.bash_profile" || SHELL_CONFIG="$HOME/.bashrc"
+                ;;
+        esac
+
+        if [ -n "$SHELL_CONFIG" ] && [ -f "$SHELL_CONFIG" ]; then
+            echo "Adding $INSTALL_DIR to PATH in $SHELL_CONFIG..."
+            echo "" >> "$SHELL_CONFIG"
+            echo "# Added by gideon installer" >> "$SHELL_CONFIG"
+            echo "export PATH=\"\$PATH:$INSTALL_DIR\"" >> "$SHELL_CONFIG"
+            export PATH="$PATH:$INSTALL_DIR"
+            echo "Restart your terminal or run 'source $SHELL_CONFIG' to pick up the change."
+        else
+            # Fallback: tell the user
+            echo ""
+            echo "  $INSTALL_DIR is not on your PATH."
+            echo "  Add it to your shell config:"
+            echo ""
+            echo "    export PATH=\"\$PATH:$INSTALL_DIR\""
+            echo ""
+        fi
         ;;
 esac
 
