@@ -100,7 +100,19 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                     except json.JSONDecodeError:
                         continue
 
-                    choice = chunk.get("choices", [{}])[0]
+                    # OpenRouter sends SSE error events when the context is too
+                    # long, credits are exhausted, or the model is unavailable.
+                    # These have an "error" key instead of "choices" — surface
+                    # them immediately instead of silently dropping them.
+                    if "error" in chunk:
+                        err = chunk["error"]
+                        msg = err.get("message", str(err))
+                        raise NetworkError(f"OpenRouter: {msg}")
+
+                    choices_list = chunk.get("choices", [{}])
+                    if not choices_list:
+                        continue
+                    choice = choices_list[0]
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason")
 
@@ -145,7 +157,8 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                         message_yielded = True
                         message = {
                             "role": "assistant",
-                            "content": content_so_far or None
+                            "content": content_so_far or None,
+                            "finish_reason": finish_reason,
                         }
                         # Only include tool_calls if we actually collected any
                         if tool_calls_by_index:
@@ -205,17 +218,22 @@ def validate_key(api_key: str) -> bool:
         if response.status_code == 402:
             raise NoCreditsError("Insufficient credits")
         
-        data = response.json()["data"]
+        if response.status_code != 200:
+            raise NetworkError(f"OpenRouter returned status {response.status_code}")
 
-        if data["limit_remaining"] is None or data["limit_remaining"] > 0: 
+        data = response.json().get("data")
+        if data is None:
+            raise NetworkError("Unexpected response from OpenRouter — missing 'data' field")
+
+        if data.get("limit_remaining") is None or data.get("limit_remaining", 0) > 0:
             return True
         else:
             return False
     except httpx.TimeoutException:
-        raise NetworkError("Request to Openrouter timed out. Try again in a moment")
+        raise NetworkError("Request to OpenRouter timed out. Try again in a moment")
 
     except httpx.ConnectError:
-        raise NetworkError("Could not reach Openrouter")
+        raise NetworkError("Could not reach OpenRouter")
     
 
 def fetch_models() -> list[dict]:
@@ -228,7 +246,11 @@ def fetch_models() -> list[dict]:
         if response.status_code != 200:
             raise NetworkError(f"OpenRouter returned status {response.status_code}")
 
-        return response.json()["data"]
+        models = response.json().get("data")
+        if models is None:
+            raise NetworkError("Unexpected response from OpenRouter — missing 'data' field")
+
+        return models
 
     except httpx.TimeoutException:
         raise NetworkError("Request to OpenRouter timed out. Try again in a moment")

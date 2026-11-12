@@ -1,23 +1,20 @@
 from pathlib import Path
 
-from gideon.session_manager import get_session_dir, load_session
+from gideon.session_manager import get_session_dir, load_session, get_session_metadata
 from gideon.picker import pick_session
 from gideon.exceptions import PickerCancelled
 
 from gideon.loop import run_loop
 
-from gideon.system_prompt import build_system_prompt
-
-from gideon.config import get_agent_name, is_configured, load_config, save_config
+from gideon.config import is_configured, load_config, save_config
 
 from gideon.onboarding import run_onboarding
 from gideon.models import pick_model
 
-from gideon.display import print_welcome
-
-from gideon.tools_config import TOOLS, DESTRUCTIVE_TOOLS
+from gideon.display import print_welcome, print_history
 from gideon.display import VERSION
 
+import questionary
 import sys
 
 def main() -> None:
@@ -35,15 +32,18 @@ def main() -> None:
             print("Setup cancelled. Exiting")
             return
 
-    try:
-        model = pick_model()
-    except PickerCancelled:
-        print("No model selected. Exiting")
-        return
-
     config = load_config()
-    config["model"] = model
-    save_config(config)
+    saved_model = config.get("model")
+    if saved_model:
+        model = saved_model
+    else:
+        try:
+            model = pick_model()
+        except PickerCancelled:
+            print("No model selected. Exiting")
+            return
+        config["model"] = model
+        save_config(config)
 
     cwd = Path.cwd()
 
@@ -57,12 +57,17 @@ def main() -> None:
     
     if session_path.exists():
         context = load_session(session_path)
+        metadata = get_session_metadata(session_path)
+        auto_mode = metadata.get("auto_mode", False)
+        if context:
+            print_history(context)
     else:
         context = []
-        # system_prompt = build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)
-        # context.append({"role": "system", "content": system_prompt})
+        auto_mode = questionary.confirm("Enable auto mode?", default=False).ask()
+        if auto_mode is None:
+            auto_mode = False
 
-    run_loop(context, session_path, session_dir)
+    run_loop(context, session_path, session_dir, auto_mode)
     
 if __name__ == "__main__":
     main()

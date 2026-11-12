@@ -1,5 +1,7 @@
 import json
 import random
+import re
+import sys
 from gideon.openrouter import chat_stream
 from gideon.config import load_config
 
@@ -8,20 +10,19 @@ from pathlib import Path
 from gideon.session_manager import save_session, list_sessions, new_session_path, load_session, delete_session
 
 # normal config imports
-from gideon.config import get_agent_name, get_context_length
+from gideon.config import get_agent_name, get_context_length, get_total_tokens_used, set_total_tokens_used
 
 # color config imports 
 from gideon.display import (
     print_error, StreamDisplay, print_edit_diff, print_write_summary, print_context_bar,
     print_tool, print_tool_summary, print_permission, print_user,
-    print_top_rule, print_info, print_success, console, COLORS
+    print_top_rule, print_info, print_success, print_history, console, COLORS
 )
 
 from prompt_toolkit import PromptSession
 from prompt_toolkit.key_binding import KeyBindings
-from gideon.picker import select_choice
-from gideon.exceptions import PickerCancelled
-import questionary
+from prompt_toolkit.formatted_text import FormattedText
+from prompt_toolkit.styles import Style as PTKStyle
 
 # tool + model related stuff
 from gideon.tools.read_file import read_file
@@ -33,10 +34,14 @@ from gideon.tools.grep_search import grep_search
 from gideon.tools.read_file_range import read_file_range
 from gideon.tools.move_file import move_file
 from gideon.tools.find_files import find_files
+from gideon.tools.git_context import get_git_context
 from gideon.tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
+from gideon.picker import select_choice
+from gideon.exceptions import PickerCancelled
+import questionary
 
 from gideon.tools.pathsafe import BASE_PATH
-from gideon.system_prompt import build_system_prompt
+from gideon.system_prompt import build_system_prompt, read_memory
 
 # commands stuff
 from gideon.commands.config import open_config
@@ -53,7 +58,7 @@ def _random_status() -> str:
 
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/commands", "/config", "/sessions", "/restore", "/delete"]
+CONSOLE_COMMANDS = ["/commands", "/help", "/config", "/sessions", "/restore", "/delete", "/auto", "/rewind"]
 
 
 def _line_count(text: str) -> int:
@@ -65,14 +70,23 @@ def _line_count(text: str) -> int:
 
 COMMANDS_TEXT = """\
   [bold]/commands[/bold]                  View all commands
+  [bold]/help[/bold]                     Alias for /commands
   [bold]/config[/bold]                  Open config menu
   [bold]/sessions[/bold]                  List all sessions for this project
   [bold]/restore[/bold] [dim]<number>[/dim]         Restore a previous session
   [bold]/delete[/bold] [dim]<number>[/dim]          Delete a session
+  [bold]/rewind[/bold]                 Rewind the conversation to a previous turn
+  [bold]/auto[/bold]                    Toggle auto mode on/off
   [bold]quit[/bold], [bold]exit[/bold], [bold]leave[/bold]         End the session"""
 
 # tool exec logic
-def run_tool(call, always_allowed: list[str]):
+# Accumulates file snapshots across the current user turn.
+# Each entry: {"path": "/some/file.py", "content": "old_content or None if new"}
+# On /rewind these are replayed in reverse to restore the codebase.
+_turn_file_snapshots: list[dict] = []
+
+
+def run_tool(call, always_allowed: list[str], context: list[dict]):
     name = call["function"]["name"]
 
     try:
@@ -101,6 +115,15 @@ def run_tool(call, always_allowed: list[str]):
         path = arguments["path"]
         content = arguments["content"]
         lines = _line_count(content)
+
+        # Snapshot the file before overwriting (only the first time per turn)
+        if not any(s["path"] == path for s in _turn_file_snapshots):
+            _turn_file_snapshots.append({
+                "path": path,
+                "content": _read_file_content(path),
+                "turn_index": len(context),
+            })
+
         result = write_file(path, content)
         print_tool_summary("write_file", f"{path} ({lines} lines)")
         return result
@@ -132,7 +155,15 @@ def run_tool(call, always_allowed: list[str]):
         new_string = arguments["new_string"]
         replace_all = arguments.get("replace_all", False)
 
-        # Capture old content before the edit for diff display
+        # Snapshot the file before editing (full content, not just the edit)
+        if not any(s["path"] == path for s in _turn_file_snapshots):
+            _turn_file_snapshots.append({
+                "path": path,
+                "content": _read_file_content(path),
+                "turn_index": len(context),
+            })
+
+        # Capture old content for diff display
         old_content = _read_file_content(path)
 
         result = edit_file(path, old_string, new_string, replace_all)
@@ -177,6 +208,12 @@ def run_tool(call, always_allowed: list[str]):
         result = find_files(pattern, search_path)
         match_count = len(result.splitlines()) if result and not result.startswith("No") and not result.startswith("Error") else 0
         print_tool_summary("find_files", f"pattern: '{pattern}' ({match_count} matches)")
+        return result
+
+    if name == "get_git_context":
+        result = get_git_context()
+        line_count = _line_count(result) if result else 0
+        print_tool_summary("get_git_context", f"{line_count} lines")
         return result
 
     return f"Error: unknown tool '{name}'"
@@ -248,10 +285,13 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         print_error("Cancelled, denying by default")
         return "no"
 
-def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None:
+def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mode: bool = False) -> None:
     model = get_model()
     api_key = load_config()["openrouter_api_key"]
     always_allowed: list[str] = []
+
+    if auto_mode:
+        always_allowed = list(DESTRUCTIVE_TOOLS)
 
     # Build prompt_toolkit session — single-line input keeps the UI clean
     # when pasting large blocks. Pasted content is captured entirely but
@@ -266,8 +306,31 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
     @kb.add("escape", "enter")
     def _(event):
-        """Alt+Enter / Escape+Enter inserts a newline."""
+        """Alt+Enter inserts a newline."""
         event.current_buffer.insert_text("\n")
+
+    @kb.add("escape")
+    def _(event):
+        """Escape interrupts the current action."""
+        raise KeyboardInterrupt()
+
+    newline_hint = "option+enter" if sys.platform == "darwin" else "alt+enter"
+
+    ptk_style = PTKStyle([
+        ("bottom-toolbar", "bg:default fg:#888888 noreverse"),
+    ])
+
+    def _make_toolbar() -> FormattedText:
+        left = f"  {newline_hint} for newline     esc to cancel"
+        right = "/commands"
+        padding = max(2, console.width - len(left) - len(right))
+        return FormattedText([
+            ("fg:#888888", "\u2500" * console.width),
+            ("", "\n"),
+            ("", left),
+            ("", " " * padding),
+            ("bold fg:#239054", right),
+        ])
 
     prompt_session = PromptSession(
         "> ",
@@ -276,6 +339,8 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
         history=None,
         enable_history_search=False,
         mouse_support=False,
+        bottom_toolbar=_make_toolbar,
+        style=ptk_style,
     )
 
     while True:
@@ -294,7 +359,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
         line_count = len(user_input.splitlines())
         if line_count > 1:
             console.print(f"   [Pasted +{line_count} lines]", style=COLORS["tool_detail"])
-        console.print("   Ctrl+C to interrupt", style=COLORS["tool_detail"])
+        console.print("   Esc to interrupt", style=COLORS["tool_detail"])
 
         # check if input is a console command
         cmd_parts = user_input.strip().split()
@@ -305,7 +370,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
         if cmd in CONSOLE_COMMANDS:
 
-            if cmd == "/commands":
+            if cmd == "/commands" or cmd == "/help":
                 console.print()
                 for line in COMMANDS_TEXT.splitlines():
                     console.print(f"   {line}")
@@ -352,6 +417,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 target = sessions[session_num - 1]
                 context = load_session(target["path"])
                 session_path = new_session_path(session_dir)
+                print_history(context)
                 print_success(f"Restored from {target['display']} in a new session.")
                 continue
 
@@ -382,6 +448,79 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 print_success(f"Deleted session from {target['display']}.")
                 continue
 
+            if cmd == "/auto":
+                auto_mode = not auto_mode
+                if auto_mode:
+                    always_allowed = list(DESTRUCTIVE_TOOLS)
+                else:
+                    always_allowed = []
+                mode_label = "auto" if auto_mode else "manual"
+                print_success(f"Switched to {mode_label} mode.")
+                continue
+
+            if cmd == "/rewind":
+                # Find all user message indices in the context
+                user_indices = [
+                    i for i, msg in enumerate(context)
+                    if msg.get("role") == "user"
+                ]
+                if len(user_indices) <= 1:
+                    print_error("Not enough conversation history to rewind.")
+                    continue
+
+                # Build choices from all user messages, most recent first
+                recent_indices = list(reversed(user_indices))
+                choices = []
+                for idx in recent_indices:
+                    content = context[idx].get("content", "")
+                    # Collapse whitespace and truncate for clean one-line display
+                    display = re.sub(r'\s+', ' ', content).strip()[:40]
+                    if len(re.sub(r'\s+', ' ', content).strip()) > 40:
+                        display += "..."
+                    choices.append(questionary.Choice(title=display, value=idx))
+
+                picked = select_choice("Rewind to which turn?", choices)
+
+                # Restore files to their state before the removed turns
+                try:
+                    with open(session_path, "r") as f:
+                        session_data = json.load(f)
+                except (OSError, json.JSONDecodeError):
+                    session_data = {}
+
+                old_snapshots = session_data.get("file_snapshots", []) if isinstance(session_data, dict) else []
+
+                # Find snapshots for turns that are being removed (turn_index > picked)
+                removed_snapshots = [s for s in old_snapshots if s.get("turn_index", 0) > picked]
+                # Restore in reverse order so edits undo in correct sequence
+                for s in reversed(removed_snapshots):
+                    path = s["path"]
+                    content = s["content"]
+                    target = (BASE_PATH / path).resolve()
+                    try:
+                        if content is None:
+                            # File didn't exist before — delete it
+                            if target.exists():
+                                target.unlink()
+                        else:
+                            target.parent.mkdir(parents=True, exist_ok=True)
+                            target.write_text(content)
+                    except Exception as e:
+                        print_error(f"Failed to restore {path}: {e}")
+
+                restored_count = len(removed_snapshots)
+                if restored_count > 0:
+                    print_tool(f"Restored {restored_count} file(s) to pre-rewind state")
+
+                # Truncate context and filter snapshots to match
+                context = context[:picked + 1]
+                remaining_snapshots = [s for s in old_snapshots if s.get("turn_index", 0) <= picked]
+                save_session(session_path, context, model, auto_mode,
+                             file_snapshots=remaining_snapshots)
+                display = re.sub(r'\s+', ' ', context[-1].get('content', ''))[:40]
+                print_success(f"Rewound to: {display}")
+                continue
+
 
         # check if input is empty
         if user_input.strip().lower() == "":
@@ -396,7 +535,12 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
             })
 
             while True:
-                system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
+                memory_content = read_memory()
+                git_context = get_git_context()
+                system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS, memory_content, git_context)}
+
+                # Clear snapshots for a fresh turn
+                _turn_file_snapshots.clear()
 
                 display = StreamDisplay(status=_random_status())
 
@@ -433,7 +577,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                     for call in final_message["tool_calls"]:
                         try:
-                            result = run_tool(call, always_allowed)
+                            result = run_tool(call, always_allowed, context)
                             context.append({
                                 "role": "tool",
                                 "tool_call_id": call["id"],
@@ -453,22 +597,40 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                 reply_text = final_message.get("content") or ""
 
+                if not reply_text.strip():
+                    # Model returned an empty response — log a message and re-prompt
+                    print_error("Received empty response from model. Retrying...")
+                    continue
+
+                # Strip horizontal rules that models sometimes inject despite instructions
+                reply_text = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'\n{3,}', '\n\n', reply_text)  # collapse excessive blank lines
+
                 context.append({
                     "role":"assistant", "content":reply_text
                 })
 
-                # saving turn to session log
-                save_session(session_path, context, model)
+                # saving turn to session log (with file snapshots for rewind)
+                save_session(session_path, context, model, auto_mode,
+                             file_snapshots=_turn_file_snapshots)
 
-                # Show context usage bar after the final reply
+                # Accumulate total tokens used across the session
                 usage = final_message.get("usage")
                 if usage:
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    running_total = get_total_tokens_used() + prompt_tokens + completion_tokens
+                    set_total_tokens_used(running_total)
+
+                    # Show context usage bar after the final reply
                     ctx_len = get_context_length()
                     if ctx_len:
                         print_context_bar(
-                            usage.get("prompt_tokens", 0),
-                            usage.get("completion_tokens", 0),
+                            prompt_tokens,
+                            completion_tokens,
                             ctx_len,
+                            auto_mode,
                         )
 
                 break

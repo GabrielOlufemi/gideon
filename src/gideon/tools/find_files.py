@@ -1,5 +1,5 @@
 from pathlib import Path
-from gideon.tools.pathsafe import BASE_PATH, is_safe_path
+from gideon.tools.pathsafe import BASE_PATH, is_safe_path, should_exclude
 
 
 FIND_FILES_SCHEMA = {
@@ -27,15 +27,6 @@ FIND_FILES_SCHEMA = {
     }
 }
 
-EXCLUDED_DIRS = {".git", ".venv", "venv", "__pycache__", "node_modules", ".mypy_cache", ".pytest_cache"}
-
-
-def _should_exclude(entry: Path) -> bool:
-    for part in entry.relative_to(BASE_PATH).parts:
-        if part in EXCLUDED_DIRS:
-            return True
-    return False
-
 
 def find_files(pattern: str, path: str = ".") -> str:
     if not is_safe_path(path):
@@ -54,7 +45,7 @@ def find_files(pattern: str, path: str = ".") -> str:
         for entry in target.rglob(pattern):
             if not entry.is_file():
                 continue
-            if _should_exclude(entry):
+            if should_exclude(entry):
                 continue
             rel_path = entry.relative_to(BASE_PATH)
             matches.append(str(rel_path))

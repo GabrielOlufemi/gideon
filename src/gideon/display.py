@@ -1,4 +1,5 @@
 import difflib
+import json
 import re
 import sys
 
@@ -55,7 +56,7 @@ def print_user(message: str) -> None:
 def print_top_rule() -> None:
     console.print(Rule(style="dim"))
 
-def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length: int | None) -> None:
+def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length: int | None, auto_mode: bool = False) -> None:
     """Print a compact context usage indicator, Claude-style."""
     if not context_length or context_length <= 0:
         return
@@ -74,10 +75,26 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
     else:
         style = "dim"
 
-    console.print(Padding(
-        f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]",
-        (0, 0, 0, 3),
-    ))
+    bar_text = f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]"
+
+    if auto_mode:
+        mode_text = Text()
+        mode_text.append("mode \u00b7 ", style="bold")
+        mode_text.append("/auto", style="bold")
+    else:
+        mode_text = Text()
+        mode_text.append("mode \u00b7 ", style="bold")
+        mode_text.append("/manual", style="bold")
+
+    # Right-align mode tag within terminal width
+    full = Text.from_markup(bar_text)
+    # Calculate padding needed to push mode_text to the right edge
+    left_width = len(full.plain)
+    mode_width = len(mode_text.plain)
+    spacing = max(2, console.width - left_width - mode_width - 4)
+    full.append(" " * spacing)
+    full.append(mode_text)
+    console.print(Padding(full, (0, 0, 0, 3)))
 
 
 def print_tool(message: str) -> None:
@@ -94,6 +111,10 @@ class StreamDisplay:
 
     Shows an optional status message (e.g. "Thinking...") before content arrives.
     The status is replaced seamlessly when the first content token comes in.
+
+    Horizontal rule patterns (---, ***, ___) are stripped from the displayed
+    content because they're ugly in a streaming terminal UI and the model adds
+    them despite being told not to.
     """
 
     def __init__(self, status: str | None = None):
@@ -105,6 +126,13 @@ class StreamDisplay:
         if status:
             # Show the status panel immediately
             self._show_status()
+
+    def _strip_horizontal_rules(self, text: str) -> str:
+        """Remove Markdown horizontal rule lines from display content."""
+        text = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text
 
     def _show_status(self) -> None:
         """Render the status message as a dim panel."""
@@ -120,17 +148,22 @@ class StreamDisplay:
         self._live = Live(panel, refresh_per_second=15, transient=False)
         self._live.start()
 
-    def _show_content(self) -> None:
-        """Switch from status to content renderable."""
-        panel = Padding(
+    def _render_panel(self) -> Padding:
+        """Build the current panel from content, stripping HRs."""
+        cleaned = self._strip_horizontal_rules(self._content)
+        return Padding(
             Panel(
-                Markdown(self._content, code_theme="monokai"),
+                Markdown(cleaned, code_theme="monokai"),
                 box=LEFT_ONLY,
                 border_style=COLORS["accent"],
                 padding=(0, 1),
             ),
             INDENT,
         )
+
+    def _show_content(self) -> None:
+        """Switch from status to content renderable."""
+        panel = self._render_panel()
         if self._live is None:
             self._live = Live(panel, refresh_per_second=15, transient=False)
             self._live.start()
@@ -147,16 +180,7 @@ class StreamDisplay:
             self._has_content = True
             self._show_content()
         else:
-            panel = Padding(
-                Panel(
-                    Markdown(self._content, code_theme="monokai"),
-                    box=LEFT_ONLY,
-                    border_style=COLORS["accent"],
-                    padding=(0, 1),
-                ),
-                INDENT,
-            )
-            self._live.update(panel)
+            self._live.update(self._render_panel())
 
     def finalize(self) -> None:
         """Stop the live display, leaving the final renderable on screen."""
@@ -269,7 +293,7 @@ def print_welcome(cwd: str) -> None:
     left = (
         f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
         # "No model selected yet"
-        "\n\n[bold]/commands[/bold] [dim]to view all commands"
+        "\n\n[bold]/commands[/bold] or [bold]/help[/bold] [dim]to view all commands"
         "\n[bold]/exit[/bold] [dim]to leave interface"
 
     )
@@ -312,4 +336,71 @@ def print_info(lines: list[str]) -> None:
     console.print()
     for line in lines:
         console.print(f"   [{COLORS['accent']}]{line}[/{COLORS['accent']}]")
+    console.print()
+
+
+def print_history(context: list[dict]) -> None:
+    """Replay the conversation history into the terminal."""
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+
+    for msg in context:
+        role = msg.get("role")
+
+        if role == "user":
+            content = msg.get("content") or ""
+            for line in content.splitlines():
+                console.print(f"> {line}".ljust(console.width), style=COLORS["user_input"])
+            console.print()
+            console.print(Rule(style="dim"))
+
+        elif role == "assistant":
+            content = msg.get("content") or ""
+            # Strip horizontal rules from saved content — old sessions may have them
+            content = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', content, flags=re.MULTILINE)
+            content = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', content, flags=re.MULTILINE)
+            if content:
+                parts = re.split(r"(```[\s\S]*?```)", content)
+                for part in parts:
+                    if not part.strip():
+                        continue
+                    if part.startswith("```"):
+                        console.print(Padding(Markdown(part, code_theme="monokai"), CODE_INDENT))
+                    else:
+                        console.print(Padding(
+                            Panel(
+                                Markdown(part.strip(), code_theme="monokai"),
+                                box=LEFT_ONLY,
+                                border_style=COLORS["accent"],
+                                expand=False,
+                                padding=(0, 1),
+                            ),
+                            INDENT,
+                        ))
+
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    name = tc["function"]["name"]
+                    args = tc["function"]["arguments"]
+                    try:
+                        parsed = json.loads(args)
+                        flat = ", ".join(f"{k}={v}" for k, v in parsed.items())
+                    except (json.JSONDecodeError, TypeError):
+                        flat = args
+                    if len(flat) > console.width - 14:
+                        flat = flat[:console.width - 18] + "..."
+                    console.print(f"   [{COLORS['accent']}]{name}:[/{COLORS['accent']}] {flat}")
+                console.print()
+                console.print()
+
+        elif role == "tool":
+            content = msg.get("content") or ""
+            if content:
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                console.print(f"   tool result: {content}", style="dim")
+
+    console.print(Rule(style="bold green"))
+    console.print(f"   [bold]End of history \u2014 {len(context)} messages loaded[/bold]")
     console.print()

@@ -7,25 +7,27 @@ from gideon.picker import select_choice
 from gideon.config import set_context_length
 
 RECOMMENDED_MODELS = [
-    {"id": "anthropic/claude-opus-4.8",  "label": "Claude Opus 4.8",  "provider": "Anthropic"},
-    {"id": "anthropic/claude-sonnet-5",  "label": "Claude Sonnet 5",  "provider": "Anthropic"},
-    {"id": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5", "provider": "Anthropic"},
+    {"id": "anthropic/claude-opus-4.8",  "label": "Claude Opus 4.8",  "provider": "Anthropic", "context_length": 200_000},
+    {"id": "anthropic/claude-sonnet-5",  "label": "Claude Sonnet 5",  "provider": "Anthropic", "context_length": 200_000},
+    {"id": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5", "provider": "Anthropic", "context_length": 200_000},
 
-    {"id": "deepseek/deepseek-v4-pro",       "label": "DeepSeek V4 Pro",        "provider": "DeepSeek"},
-    {"id": "deepseek/deepseek-v4-flash",     "label": "DeepSeek V4 Flash",      "provider": "DeepSeek"},
-    {"id": "deepseek/deepseek-v3.2-speciale","label": "DeepSeek V3.2 Speciale", "provider": "DeepSeek"},
+    {"id": "deepseek/deepseek-v4-pro",       "label": "DeepSeek V4 Pro",        "provider": "DeepSeek", "context_length": 128_000},
+    {"id": "deepseek/deepseek-v4-flash",     "label": "DeepSeek V4 Flash",      "provider": "DeepSeek", "context_length": 128_000},
+    {"id": "deepseek/deepseek-v3.2-speciale","label": "DeepSeek V3.2 Speciale", "provider": "DeepSeek", "context_length": 128_000},
 
-    {"id": "google/gemini-3.1-pro",   "label": "Gemini 3.1 Pro",   "provider": "Google"},
-    {"id": "google/gemini-3.5-flash", "label": "Gemini 3.5 Flash", "provider": "Google"},
+    {"id": "google/gemini-3.1-pro",   "label": "Gemini 3.1 Pro",   "provider": "Google", "context_length": 1_000_000},
+    {"id": "google/gemini-3.5-flash", "label": "Gemini 3.5 Flash", "provider": "Google", "context_length": 1_000_000},
 
-    {"id": "openai/gpt-5.6-sol", "label": "GPT-5.6 Sol", "provider": "OpenAI"},
-    {"id": "openai/gpt-5.5",     "label": "GPT-5.5",     "provider": "OpenAI"},
+    {"id": "openai/gpt-5.6-sol", "label": "GPT-5.6 Sol", "provider": "OpenAI", "context_length": 128_000},
+    {"id": "openai/gpt-5.5",     "label": "GPT-5.5",     "provider": "OpenAI", "context_length": 128_000},
 ]
+
+_RECOMMENDED_LOOKUP = {m["id"]: m for m in RECOMMENDED_MODELS}
 
 
 def fetch_all_models() -> list[dict]:
     raw_models = fetch_models()
-    recommended_ids = {m["id"] for m in RECOMMENDED_MODELS}
+    recommended_ids = set(_RECOMMENDED_LOOKUP)
 
     usable = [
         m for m in raw_models
@@ -38,7 +40,13 @@ def fetch_all_models() -> list[dict]:
 
 
 def _lookup_context_length(model_id: str, all_models: list[dict] | None = None) -> int | None:
-    """Look up context_length for a given model ID from the OpenRouter model list."""
+    """Look up context_length for a model. Checks recommended list first, then OpenRouter."""
+    # Check static map first — no network needed
+    recommended = _RECOMMENDED_LOOKUP.get(model_id)
+    if recommended and recommended.get("context_length"):
+        return recommended["context_length"]
+
+    # Fall back to network lookup for models not in our list
     if all_models is None:
         try:
             all_models = fetch_models()
@@ -72,16 +80,17 @@ def pick_model() -> str:
 
     result = select_choice("Choose a model", choices)
 
-    # Fetch the raw model list once upfront; use for both recommended and full paths
-    raw_models = fetch_models()
-
     if result != "SHOW ALL":
-        ctx_len = _lookup_context_length(result, raw_models)
+        # No network needed — context length is baked into RECOMMENDED_MODELS
+        ctx_len = _lookup_context_length(result)
         if ctx_len:
             set_context_length(ctx_len)
         return result
 
-    recommended_ids = {m["id"] for m in RECOMMENDED_MODELS}
+    # "Show all models" — fetch the full list
+    raw_models = fetch_models()
+
+    recommended_ids = set(_RECOMMENDED_LOOKUP)
     usable = [
         m for m in raw_models
         if "text" in m.get("architecture", {}).get("input_modalities", [])
