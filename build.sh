@@ -3,35 +3,38 @@ set -euo pipefail
 
 # Build standalone binaries with PyInstaller
 # Usage: ./build.sh [version]
-# Produces dist/gideon-{os}-{arch}[-{tag}] for the current platform
-# If a version tag is given, the old binary is preserved under that tag.
+# Builds dist/gideon-{os}-{arch}/  (directory with binary + _internal/)
+# Produces     dist/gideon-{os}-{arch}.tar.gz  (for distribution)
+# Creates a convenience symlink at dist/gideon -> dist/gideon-{os}-{arch}/gideon
 
 NAME="gideon"
 TAG="${1:-}"
 
 echo "Building $NAME${TAG:+ ($TAG)}..."
 
-# If a tag is provided, copy the current binary before building
-if [[ -n "$TAG" ]]; then
-    EXISTING="dist/${NAME}"
-    # Check for the platform-renamed version too
-    OS_TEMP="$(uname -s | tr '[:upper:]' '[:lower:]')"
-    ARCH_TEMP="$(uname -m)"
-    [[ "$ARCH_TEMP" == "x86_64" ]] && ARCH_TEMP="x86_64"
-    [[ "$ARCH_TEMP" == "aarch64" || "$ARCH_TEMP" == "arm64" ]] && ARCH_TEMP="arm64"
-    RENAMED="dist/${NAME}-${OS_TEMP}-${ARCH_TEMP}"
+# Detect platform early so we can reference the existing build directory
+OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+ARCH="$(uname -m)"
+case "$ARCH" in
+    x86_64) ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
+esac
 
-    if [[ -f "$RENAMED" ]]; then
-        cp "$RENAMED" "dist/${NAME}-${OS_TEMP}-${ARCH_TEMP}-${TAG}"
-        echo "Preserved existing binary as ${NAME}-${OS_TEMP}-${ARCH_TEMP}-${TAG}"
-    elif [[ -f "$EXISTING" ]]; then
-        cp "$EXISTING" "dist/${NAME}-${OS_TEMP}-${ARCH_TEMP}-${TAG}"
-        echo "Preserved existing binary as ${NAME}-${OS_TEMP}-${ARCH_TEMP}-${TAG}"
+# Tag-preservation for the new onedir model: tarball the current build
+if [[ -n "$TAG" ]]; then
+    EXISTING_DIR="dist/${NAME}-${OS}-${ARCH}"
+    if [[ -d "$EXISTING_DIR" ]]; then
+        ARCHIVED="dist/${NAME}-${OS}-${ARCH}-${TAG}.tar.gz"
+        (cd dist && tar -czf "$(basename "$ARCHIVED")" "$(basename "$EXISTING_DIR")")
+        echo "Preserved existing build as $(basename "$ARCHIVED")"
     fi
 fi
 
+# Clean stale output from previous builds
+rm -rf "dist/${NAME}" "dist/${NAME}-${OS}-${ARCH}" "dist/${NAME}-${OS}-${ARCH}.tar.gz"
+
 pyinstaller \
-    --onefile \
+    --onedir \
     --name "$NAME" \
     --distpath dist \
     --workpath build/pyinstaller \
@@ -40,15 +43,20 @@ pyinstaller \
     --noconfirm \
     src/gideon/main.py
 
-# Rename with platform suffix
-OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
-case "$ARCH" in
-    x86_64) ARCH="x86_64" ;;
-    aarch64|arm64) ARCH="arm64" ;;
-esac
+# Rename directory with platform suffix
+mv "dist/$NAME" "dist/${NAME}-${OS}-${ARCH}"
 
-FINAL="dist/${NAME}-${OS}-${ARCH}"
-mv "dist/$NAME" "$FINAL"
-echo "Built $FINAL"
+# Convenience symlink so you can run dist/gideon too
+ln -sf "${NAME}-${OS}-${ARCH}/${NAME}" "dist/${NAME}"
+
+# Package as a portable archive for distribution
+(cd dist && tar -czf "${NAME}-${OS}-${ARCH}.tar.gz" "${NAME}-${OS}-${ARCH}")
+
+echo ""
+echo "Built:"
+echo "  dist/${NAME}-${OS}-${ARCH}/"
+echo "    └─ ${NAME}"
+echo "    └─ _internal/"
+echo "  dist/${NAME}  ->  ${NAME}-${OS}-${ARCH}/${NAME}  (symlink)"
+echo "  dist/${NAME}-${OS}-${ARCH}.tar.gz"
 echo "Done."

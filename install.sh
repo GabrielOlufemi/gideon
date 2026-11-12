@@ -25,23 +25,32 @@ case "$ARCH" in
     *) echo "Unsupported architecture: $ARCH"; exit 1 ;;
 esac
 
-BINARY="${NAME}-${PLATFORM}-${ARCH}"
-DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${BINARY}"
+ARCHIVE="${NAME}-${PLATFORM}-${ARCH}.tar.gz"
+DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ARCHIVE}"
+TARGET_DIR="${INSTALL_DIR}/${NAME}-${PLATFORM}-${ARCH}"
 
 mkdir -p "$INSTALL_DIR"
 
 echo "Downloading $NAME for $PLATFORM/$ARCH..."
 if command -v curl &>/dev/null; then
-    curl -fsSL "$DOWNLOAD_URL" -o "$INSTALL_DIR/$NAME"
+    curl -fsSL "$DOWNLOAD_URL" -o "${INSTALL_DIR}/${ARCHIVE}"
 elif command -v wget &>/dev/null; then
-    wget -q "$DOWNLOAD_URL" -O "$INSTALL_DIR/$NAME"
+    wget -q "$DOWNLOAD_URL" -O "${INSTALL_DIR}/${ARCHIVE}"
 else
     echo "Need curl or wget to download"
     exit 1
 fi
 
-chmod +x "$INSTALL_DIR/$NAME"
-echo "Installed to $INSTALL_DIR/$NAME"
+echo "Extracting..."
+tar -xzf "${INSTALL_DIR}/${ARCHIVE}" -C "$INSTALL_DIR"
+rm "${INSTALL_DIR}/${ARCHIVE}"
+
+# Symlink the binary into PATH
+ln -sf "${TARGET_DIR}/${NAME}" "${INSTALL_DIR}/${NAME}"
+chmod +x "${TARGET_DIR}/${NAME}"
+
+echo "Installed to ${TARGET_DIR}/"
+echo "  Symlinked as ${INSTALL_DIR}/${NAME}"
 
 # Check if INSTALL_DIR is on PATH, and add it automatically if not
 case ":$PATH:" in

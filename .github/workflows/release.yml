@@ -34,23 +34,29 @@ jobs:
       - run: pip install pyinstaller
       - run: pip install -e .
 
-      - name: Build binary
-        run: pyinstaller --onefile --name gideon --distpath dist --clean --noconfirm src/gideon/main.py
+      - name: Build binary (onedir)
+        run: pyinstaller --onedir --name gideon --distpath dist --clean --noconfirm src/gideon/main.py
 
-      - name: Rename binary
+      - name: Package archive
         shell: bash
         run: |
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            mv dist/gideon.exe "dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}.exe"
-          else
-            mv dist/gideon "dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}"
-          fi
+          PLATFORM="${{ matrix.platform }}"
+          ARCH="${{ matrix.arch }}"
+          BINARY="gideon"
+          [ "$PLATFORM" = "windows" ] && BINARY="gideon.exe"
+
+          # Rename directory to platform-specific name
+          mv "dist/gideon" "dist/gideon-${PLATFORM}-${ARCH}"
+
+          # Create tar.gz archive
+          (cd dist && tar -czf "gideon-${PLATFORM}-${ARCH}.tar.gz" "gideon-${PLATFORM}-${ARCH}")
+          echo "Packaged gideon-${PLATFORM}-${ARCH}.tar.gz"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: gideon-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}*
+          path: dist/gideon-${{ matrix.platform }}-${{ matrix.arch }}.tar.gz
 
   release:
     needs: build

@@ -111,6 +111,10 @@ class StreamDisplay:
 
     Shows an optional status message (e.g. "Thinking...") before content arrives.
     The status is replaced seamlessly when the first content token comes in.
+
+    Horizontal rule patterns (---, ***, ___) are stripped from the displayed
+    content because they're ugly in a streaming terminal UI and the model adds
+    them despite being told not to.
     """
 
     def __init__(self, status: str | None = None):
@@ -122,6 +126,13 @@ class StreamDisplay:
         if status:
             # Show the status panel immediately
             self._show_status()
+
+    def _strip_horizontal_rules(self, text: str) -> str:
+        """Remove Markdown horizontal rule lines from display content."""
+        text = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', text, flags=re.MULTILINE)
+        text = re.sub(r'\n{3,}', '\n\n', text)
+        return text
 
     def _show_status(self) -> None:
         """Render the status message as a dim panel."""
@@ -137,17 +148,22 @@ class StreamDisplay:
         self._live = Live(panel, refresh_per_second=15, transient=False)
         self._live.start()
 
-    def _show_content(self) -> None:
-        """Switch from status to content renderable."""
-        panel = Padding(
+    def _render_panel(self) -> Padding:
+        """Build the current panel from content, stripping HRs."""
+        cleaned = self._strip_horizontal_rules(self._content)
+        return Padding(
             Panel(
-                Markdown(self._content, code_theme="monokai"),
+                Markdown(cleaned, code_theme="monokai"),
                 box=LEFT_ONLY,
                 border_style=COLORS["accent"],
                 padding=(0, 1),
             ),
             INDENT,
         )
+
+    def _show_content(self) -> None:
+        """Switch from status to content renderable."""
+        panel = self._render_panel()
         if self._live is None:
             self._live = Live(panel, refresh_per_second=15, transient=False)
             self._live.start()
@@ -164,16 +180,7 @@ class StreamDisplay:
             self._has_content = True
             self._show_content()
         else:
-            panel = Padding(
-                Panel(
-                    Markdown(self._content, code_theme="monokai"),
-                    box=LEFT_ONLY,
-                    border_style=COLORS["accent"],
-                    padding=(0, 1),
-                ),
-                INDENT,
-            )
-            self._live.update(panel)
+            self._live.update(self._render_panel())
 
     def finalize(self) -> None:
         """Stop the live display, leaving the final renderable on screen."""
@@ -349,6 +356,9 @@ def print_history(context: list[dict]) -> None:
 
         elif role == "assistant":
             content = msg.get("content") or ""
+            # Strip horizontal rules from saved content — old sessions may have them
+            content = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', content, flags=re.MULTILINE)
+            content = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', content, flags=re.MULTILINE)
             if content:
                 parts = re.split(r"(```[\s\S]*?```)", content)
                 for part in parts:

@@ -36,11 +36,12 @@ from gideon.tools.move_file import move_file
 from gideon.tools.find_files import find_files
 from gideon.tools.git_context import get_git_context
 from gideon.tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
+from gideon.picker import select_choice
+from gideon.exceptions import PickerCancelled
+import questionary
 
 from gideon.tools.pathsafe import BASE_PATH
 from gideon.system_prompt import build_system_prompt, read_memory
-
-from prompt_toolkit.formatted_text import FormattedText
 
 # commands stuff
 from gideon.commands.config import open_config
@@ -85,7 +86,7 @@ COMMANDS_TEXT = """\
 _turn_file_snapshots: list[dict] = []
 
 
-def run_tool(call, always_allowed: list[str]):
+def run_tool(call, always_allowed: list[str], context: list[dict]):
     name = call["function"]["name"]
 
     try:
@@ -576,7 +577,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mo
 
                     for call in final_message["tool_calls"]:
                         try:
-                            result = run_tool(call, always_allowed)
+                            result = run_tool(call, always_allowed, context)
                             context.append({
                                 "role": "tool",
                                 "tool_call_id": call["id"],
@@ -602,8 +603,8 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mo
                     continue
 
                 # Strip horizontal rules that models sometimes inject despite instructions
-                reply_text = re.sub(r'^[ \t]*---+\s*$', '', reply_text, flags=re.MULTILINE)
-                reply_text = re.sub(r'^[ \t]*(-[ \t]+){2,}-\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'^[ \t]*[-*_]{3,}\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'^[ \t]*(-\s+){2,}-?\s*$', '', reply_text, flags=re.MULTILINE)
                 reply_text = re.sub(r'\n{3,}', '\n\n', reply_text)  # collapse excessive blank lines
 
                 context.append({

@@ -6,16 +6,12 @@ from gideon.exceptions import PickerCancelled
 
 from gideon.loop import run_loop
 
-from gideon.system_prompt import build_system_prompt
-
-from gideon.config import get_agent_name, is_configured, load_config, save_config
+from gideon.config import is_configured, load_config, save_config
 
 from gideon.onboarding import run_onboarding
 from gideon.models import pick_model
 
 from gideon.display import print_welcome, print_history
-
-from gideon.tools_config import TOOLS, DESTRUCTIVE_TOOLS
 from gideon.display import VERSION
 
 import questionary
