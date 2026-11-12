@@ -169,5 +169,6 @@ def _render_panel(
     all_show = out_lines + err_lines
     if len(all_show) > LIVE_MAX_LINES:
         all_show = all_show[-LIVE_MAX_LINES:]
-    text.text = "".join(all_show)
+    text.truncate(0)
+    text.append("".join(all_show))
     live.update(panel)
