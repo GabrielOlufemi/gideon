@@ -16,7 +16,7 @@ from rich.live import Live
 from rich import box
 
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 
 COLORS = {
