@@ -55,7 +55,7 @@ def print_user(message: str) -> None:
 def print_top_rule() -> None:
     console.print(Rule(style="dim"))
 
-def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length: int | None) -> None:
+def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length: int | None, auto_mode: bool = False) -> None:
     """Print a compact context usage indicator, Claude-style."""
     if not context_length or context_length <= 0:
         return
@@ -65,7 +65,7 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
 
     bar_len = 20
     filled = int((pct / 100) * bar_len)
-    bar = "█" * filled + "░" * (bar_len - filled)
+    bar = "█" * filled + "·" * (bar_len - filled)
 
     if pct >= 90:
         style = "bold red"
@@ -74,8 +74,9 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
     else:
         style = "dim"
 
+    mode_tag = "[bold]/auto[/bold]" if auto_mode else "[dim]/manual[/dim]"
     console.print(Padding(
-        f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]",
+        f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]  {mode_tag}",
         (0, 0, 0, 3),
     ))
 

@@ -3,34 +3,41 @@ from pathlib import Path
 
 
 CONFIG_DIR = Path.home() / ".gideon"
-CONFIG_PATH= CONFIG_DIR / "config.json"
+CONFIG_PATH = CONFIG_DIR / "config.json"
 
 DEFAULTS = {
-    "agent_name" : "Gideon",
-    "model" : None,
-    "openrouter_api_key" : None,
+    "agent_name": "Gideon",
+    "model": None,
+    "openrouter_api_key": None,
     "context_length": None,
     "total_tokens_used": 0,
-    "system_prompt_tokens": 0,
 }
 
-# reads config file``
+_config_cache: dict | None = None
+
+
 def load_config() -> dict:
+    global _config_cache
+    if _config_cache is not None:
+        return _config_cache
+
     if not CONFIG_PATH.exists():
-        return dict(DEFAULTS)
-    
+        _config_cache = dict(DEFAULTS)
+        return _config_cache
+
     with open(CONFIG_PATH, "r") as f:
-        config = json.load(f)
+        _config_cache = json.load(f)
 
     for key, value in DEFAULTS.items():
-        config.setdefault(key,value)
+        _config_cache.setdefault(key, value)
 
-    return config
+    return _config_cache
 
-# saves config file
+
 def save_config(config: dict) -> None:
+    global _config_cache
+    _config_cache = config
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-
     with open(CONFIG_PATH, "w") as f:
         json.dump(config, f, indent=2)
 
@@ -57,12 +64,4 @@ def get_total_tokens_used() -> int:
 def set_total_tokens_used(value: int) -> None:
     config = load_config()
     config["total_tokens_used"] = value
-    save_config(config)
-
-def get_system_prompt_tokens() -> int:
-    return load_config().get("system_prompt_tokens", 0)
-
-def set_system_prompt_tokens(value: int) -> None:
-    config = load_config()
-    config["system_prompt_tokens"] = value
     save_config(config)

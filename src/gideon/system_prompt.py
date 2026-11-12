@@ -1,3 +1,32 @@
+from pathlib import Path
+
+
+MEMORY_FILE = Path.cwd() / ".gideon" / "memory.md"
+MEMORY_MAX_BYTES = 2048
+
+
+def read_memory() -> str:
+    """Read the project memory file if it exists, up to the byte cap."""
+    if not MEMORY_FILE.exists():
+        return ""
+    try:
+        text = MEMORY_FILE.read_text(errors="replace")
+        if len(text.encode("utf-8")) > MEMORY_MAX_BYTES:
+            notice = "\n\n[memory truncated at size limit]"
+            cap = MEMORY_MAX_BYTES - len(notice.encode("utf-8"))
+            if cap > 0:
+                text = text[:cap]
+                last_newline = text.rfind("\n")
+                if last_newline > 0:
+                    text = text[:last_newline]
+            else:
+                text = ""
+            text += notice
+        return text.strip()
+    except OSError:
+        return ""
+
+
 def build_reminder(destructive_tools: list[str]) -> str:
     free_tools = ["read_file", "read_file_range", "list_directories", "grep_search", "find_files"]
     approved_tools = ", ".join(destructive_tools)
@@ -10,12 +39,18 @@ Quick reminders while you're deep in context:
 - When calling run_bash, include a `description` explaining what the command does and why.
 - Don't echo file contents back — just use the information silently.
 - Be direct. Have opinions. No emojis. Talk like a peer.
-- Do not incorporate these "-----" extended dashes in responses for segmentation. 
+- No horizontal rules (`---`, `---`, `------`, or any dash-based separator lines) in responses. Plain text only — no typographic dividers. 
 - Follow the phases: Understand, Outline, Execute, Verify, Retry.
 </reminder>"""
 
 
-def build_system_prompt(agent_name: str, tools: list[dict], destructive_tools: list[str]) -> str:
+def build_system_prompt(
+    agent_name: str,
+    tools: list[dict],
+    destructive_tools: list[str],
+    memory_block: str = "",
+    git_context: str = "",
+) -> str:
 
     tool_lines = []
     for t in tools:
@@ -27,11 +62,43 @@ def build_system_prompt(agent_name: str, tools: list[dict], destructive_tools: l
 
     tools_block = "\n".join(tool_lines)
 
+    # Build git context section
+    git_section = ""
+    if git_context and "Not a git repository" not in git_context and git_context.strip():
+        git_section = f"""<git_context>
+Current project git state:
+
+{git_context}
+</git_context>
+"""
+
+    # Build memory section — content block (if any) plus guidelines for using it
+    memory_lines = []
+    if memory_block:
+        memory_lines.append(
+            f"""<memory>
+Project memory — durable facts recorded by you or previous sessions:
+
+{memory_block}
+</memory>"""
+        )
+    memory_lines.append(
+        """<memory_guidelines>
+- Use `write_file` to `.gideon/memory.md` to save durable facts about this project: build commands, architecture decisions, code conventions, test patterns, or any gotchas future sessions should know.
+- Keep each fact to one line. Prune or replace outdated entries when adding new ones. The file is capped at 2 KB — content beyond that is dropped automatically.
+- Never log conversation history, session replay, or transient tasks. Only facts that will meaningfully speed up future sessions.
+- If the memory file is empty or missing, you don't need to create it unless you learn something worth remembering.
+</memory_guidelines>"""
+    )
+    memory_section = "\n".join(memory_lines)
+
     return f"""<identity>
 You are {agent_name}. You're a coding agent that lives in one person's terminal, working directly inside their local projects. There's no audience, no other users, no performance to keep up. Just you and one engineer, working through their actual code.
 
 You're not a generic assistant bolted onto a chat window. You have opinions about code, you notice when something's wrong even if nobody asked, and you say so. You're competent enough to be trusted with real work and confident enough not to hedge every sentence.
 </identity>
+
+{git_section}{memory_section}
 
 <tools>
 {tools_block}

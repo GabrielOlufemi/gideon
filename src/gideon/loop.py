@@ -1,5 +1,6 @@
 import json
 import random
+import re
 from gideon.openrouter import chat_stream
 from gideon.config import load_config
 
@@ -8,7 +9,7 @@ from pathlib import Path
 from gideon.session_manager import save_session, list_sessions, new_session_path, load_session, delete_session
 
 # normal config imports
-from gideon.config import get_agent_name, get_context_length
+from gideon.config import get_agent_name, get_context_length, get_total_tokens_used, set_total_tokens_used
 
 # color config imports 
 from gideon.display import (
@@ -33,10 +34,11 @@ from gideon.tools.grep_search import grep_search
 from gideon.tools.read_file_range import read_file_range
 from gideon.tools.move_file import move_file
 from gideon.tools.find_files import find_files
+from gideon.tools.git_context import get_git_context
 from gideon.tools_config import get_model, TOOLS, DESTRUCTIVE_TOOLS
 
 from gideon.tools.pathsafe import BASE_PATH
-from gideon.system_prompt import build_system_prompt
+from gideon.system_prompt import build_system_prompt, read_memory
 
 # commands stuff
 from gideon.commands.config import open_config
@@ -53,7 +55,7 @@ def _random_status() -> str:
 
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/commands", "/config", "/sessions", "/restore", "/delete"]
+CONSOLE_COMMANDS = ["/commands", "/config", "/sessions", "/restore", "/delete", "/auto", "/rewind"]
 
 
 def _line_count(text: str) -> int:
@@ -69,6 +71,8 @@ COMMANDS_TEXT = """\
   [bold]/sessions[/bold]                  List all sessions for this project
   [bold]/restore[/bold] [dim]<number>[/dim]         Restore a previous session
   [bold]/delete[/bold] [dim]<number>[/dim]          Delete a session
+  [bold]/rewind[/bold]                 Rewind the conversation to a previous turn
+  [bold]/auto[/bold]                    Toggle auto mode on/off
   [bold]quit[/bold], [bold]exit[/bold], [bold]leave[/bold]         End the session"""
 
 # tool exec logic
@@ -179,6 +183,12 @@ def run_tool(call, always_allowed: list[str]):
         print_tool_summary("find_files", f"pattern: '{pattern}' ({match_count} matches)")
         return result
 
+    if name == "get_git_context":
+        result = get_git_context()
+        line_count = _line_count(result) if result else 0
+        print_tool_summary("get_git_context", f"{line_count} lines")
+        return result
+
     return f"Error: unknown tool '{name}'"
 
 
@@ -248,10 +258,13 @@ def request_permission(name: str, arguments: dict[str, str]) -> str:
         print_error("Cancelled, denying by default")
         return "no"
 
-def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None:
+def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mode: bool = False) -> None:
     model = get_model()
     api_key = load_config()["openrouter_api_key"]
     always_allowed: list[str] = []
+
+    if auto_mode:
+        always_allowed = list(DESTRUCTIVE_TOOLS)
 
     # Build prompt_toolkit session — single-line input keeps the UI clean
     # when pasting large blocks. Pasted content is captured entirely but
@@ -382,6 +395,44 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
                 print_success(f"Deleted session from {target['display']}.")
                 continue
 
+            if cmd == "/auto":
+                auto_mode = not auto_mode
+                if auto_mode:
+                    always_allowed = list(DESTRUCTIVE_TOOLS)
+                else:
+                    always_allowed = []
+                mode_label = "auto" if auto_mode else "manual"
+                print_success(f"Switched to {mode_label} mode.")
+                continue
+
+            if cmd == "/rewind":
+                # Find all user message indices in the context
+                user_indices = [
+                    i for i, msg in enumerate(context)
+                    if msg.get("role") == "user"
+                ]
+                if len(user_indices) <= 1:
+                    print_error("Not enough conversation history to rewind.")
+                    continue
+
+                # Build choices from all user messages, most recent first
+                recent_indices = list(reversed(user_indices))
+                choices = []
+                for idx in recent_indices:
+                    content = context[idx].get("content", "")
+                    # Truncate long messages for display
+                    display = content[:80].rstrip()
+                    if len(content) > 80:
+                        display += "..."
+                    choices.append(questionary.Choice(title=display, value=idx))
+
+                picked = select_choice("Rewind to which turn?", choices)
+                # Truncate to keep everything up to and including the picked user message
+                context = context[:picked + 1]
+                save_session(session_path, context, model, auto_mode)
+                print_success(f"Rewound to: {context[-1].get('content', '')[:60]}")
+                continue
+
 
         # check if input is empty
         if user_input.strip().lower() == "":
@@ -396,7 +447,9 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
             })
 
             while True:
-                system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS)}
+                memory_content = read_memory()
+                git_context = get_git_context()
+                system_message = {"role": "system", "content": build_system_prompt(get_agent_name(), TOOLS, DESTRUCTIVE_TOOLS, memory_content, git_context)}
 
                 display = StreamDisplay(status=_random_status())
 
@@ -453,22 +506,34 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path) -> None
 
                 reply_text = final_message.get("content") or ""
 
+                # Strip horizontal rules that models sometimes inject despite instructions
+                reply_text = re.sub(r'^[ \t]*---+\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'^[ \t]*(-[ \t]+){2,}-\s*$', '', reply_text, flags=re.MULTILINE)
+                reply_text = re.sub(r'\n{3,}', '\n\n', reply_text)  # collapse excessive blank lines
+
                 context.append({
                     "role":"assistant", "content":reply_text
                 })
 
                 # saving turn to session log
-                save_session(session_path, context, model)
+                save_session(session_path, context, model, auto_mode)
 
-                # Show context usage bar after the final reply
+                # Accumulate total tokens used across the session
                 usage = final_message.get("usage")
                 if usage:
+                    prompt_tokens = usage.get("prompt_tokens", 0)
+                    completion_tokens = usage.get("completion_tokens", 0)
+                    running_total = get_total_tokens_used() + prompt_tokens + completion_tokens
+                    set_total_tokens_used(running_total)
+
+                    # Show context usage bar after the final reply
                     ctx_len = get_context_length()
                     if ctx_len:
                         print_context_bar(
-                            usage.get("prompt_tokens", 0),
-                            usage.get("completion_tokens", 0),
+                            prompt_tokens,
+                            completion_tokens,
                             ctx_len,
+                            auto_mode,
                         )
 
                 break

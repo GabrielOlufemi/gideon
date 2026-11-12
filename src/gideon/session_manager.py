@@ -95,7 +95,7 @@ def new_session_path(session_dir: Path) -> Path:
     return session_dir / f"session_{timestamp}.json"
 
 
-def save_session(path: Path, context: list[dict], model: str) -> None:
+def save_session(path: Path, context: list[dict], model: str, auto_mode: bool = False) -> None:
     """Save session with metadata. Preserves existing created time on re-save."""
 
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -114,6 +114,7 @@ def save_session(path: Path, context: list[dict], model: str) -> None:
 
     data = {
         "model": model,
+        "auto_mode": auto_mode,
         "created": created,
         "updated": now,
         "summary": summary,
@@ -125,6 +126,26 @@ def save_session(path: Path, context: list[dict], model: str) -> None:
             json.dump(data, f, indent=2)
     except OSError as e:
         raise RuntimeError(f"Could not write session file {path}: {e}") from e
+
+
+def get_session_metadata(path: Path) -> dict:
+    """Read just the metadata from a session file without loading messages."""
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    if isinstance(data, list):
+        return {}
+
+    return {
+        "model": data.get("model", ""),
+        "auto_mode": data.get("auto_mode", False),
+        "summary": data.get("summary", ""),
+        "created": data.get("created", ""),
+        "updated": data.get("updated", ""),
+    }
 
 
 def load_session(path: Path) -> list[dict]:

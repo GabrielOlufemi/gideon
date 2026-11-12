@@ -33,16 +33,16 @@ WRITE_FILE_SCHEMA = {
 def write_file(path: str, content: str) -> str:
     if not is_safe_path(path):
         return f"Error: '{path}' is outside the allowed directory"
-    
+
     target = (BASE_PATH / path).resolve()
 
     if target.exists() and target.is_dir():
         return f"Error: '{path}' is a directory, cannot write to it"
-    
 
     try:
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(content)
     except Exception as e:
-        return f"Error writing to '{path}' : {e}"
-    
+        return f"Error writing to '{path}': {e}"
+
     return f"Successfully wrote to '{path}'"

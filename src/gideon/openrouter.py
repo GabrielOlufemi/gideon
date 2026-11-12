@@ -205,17 +205,22 @@ def validate_key(api_key: str) -> bool:
         if response.status_code == 402:
             raise NoCreditsError("Insufficient credits")
         
-        data = response.json()["data"]
+        if response.status_code != 200:
+            raise NetworkError(f"OpenRouter returned status {response.status_code}")
 
-        if data["limit_remaining"] is None or data["limit_remaining"] > 0: 
+        data = response.json().get("data")
+        if data is None:
+            raise NetworkError("Unexpected response from OpenRouter — missing 'data' field")
+
+        if data.get("limit_remaining") is None or data.get("limit_remaining", 0) > 0:
             return True
         else:
             return False
     except httpx.TimeoutException:
-        raise NetworkError("Request to Openrouter timed out. Try again in a moment")
+        raise NetworkError("Request to OpenRouter timed out. Try again in a moment")
 
     except httpx.ConnectError:
-        raise NetworkError("Could not reach Openrouter")
+        raise NetworkError("Could not reach OpenRouter")
     
 
 def fetch_models() -> list[dict]:
@@ -228,7 +233,11 @@ def fetch_models() -> list[dict]:
         if response.status_code != 200:
             raise NetworkError(f"OpenRouter returned status {response.status_code}")
 
-        return response.json()["data"]
+        models = response.json().get("data")
+        if models is None:
+            raise NetworkError("Unexpected response from OpenRouter — missing 'data' field")
+
+        return models
 
     except httpx.TimeoutException:
         raise NetworkError("Request to OpenRouter timed out. Try again in a moment")
