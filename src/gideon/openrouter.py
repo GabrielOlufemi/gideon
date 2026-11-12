@@ -100,7 +100,19 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                     except json.JSONDecodeError:
                         continue
 
-                    choice = chunk.get("choices", [{}])[0]
+                    # OpenRouter sends SSE error events when the context is too
+                    # long, credits are exhausted, or the model is unavailable.
+                    # These have an "error" key instead of "choices" — surface
+                    # them immediately instead of silently dropping them.
+                    if "error" in chunk:
+                        err = chunk["error"]
+                        msg = err.get("message", str(err))
+                        raise NetworkError(f"OpenRouter: {msg}")
+
+                    choices_list = chunk.get("choices", [{}])
+                    if not choices_list:
+                        continue
+                    choice = choices_list[0]
                     delta = choice.get("delta", {})
                     finish_reason = choice.get("finish_reason")
 
@@ -145,7 +157,8 @@ def chat_stream(messages: list[dict], model: str, api_key: str, tools: list[dict
                         message_yielded = True
                         message = {
                             "role": "assistant",
-                            "content": content_so_far or None
+                            "content": content_so_far or None,
+                            "finish_reason": finish_reason,
                         }
                         # Only include tool_calls if we actually collected any
                         if tool_calls_by_index:

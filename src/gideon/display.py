@@ -1,4 +1,5 @@
 import difflib
+import json
 import re
 import sys
 
@@ -65,7 +66,7 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
 
     bar_len = 20
     filled = int((pct / 100) * bar_len)
-    bar = "█" * filled + "·" * (bar_len - filled)
+    bar = "█" * filled + "░" * (bar_len - filled)
 
     if pct >= 90:
         style = "bold red"
@@ -74,11 +75,26 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
     else:
         style = "dim"
 
-    mode_tag = "[bold]/auto[/bold]" if auto_mode else "[dim]/manual[/dim]"
-    console.print(Padding(
-        f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]  {mode_tag}",
-        (0, 0, 0, 3),
-    ))
+    bar_text = f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]"
+
+    if auto_mode:
+        mode_text = Text()
+        mode_text.append("mode \u00b7 ", style="bold")
+        mode_text.append("/auto", style="bold")
+    else:
+        mode_text = Text()
+        mode_text.append("mode \u00b7 ", style="bold")
+        mode_text.append("/manual", style="bold")
+
+    # Right-align mode tag within terminal width
+    full = Text.from_markup(bar_text)
+    # Calculate padding needed to push mode_text to the right edge
+    left_width = len(full.plain)
+    mode_width = len(mode_text.plain)
+    spacing = max(2, console.width - left_width - mode_width - 4)
+    full.append(" " * spacing)
+    full.append(mode_text)
+    console.print(Padding(full, (0, 0, 0, 3)))
 
 
 def print_tool(message: str) -> None:
@@ -270,7 +286,7 @@ def print_welcome(cwd: str) -> None:
     left = (
         f"[bold]Current Path:[/bold] [dim]{cwd}[/dim]\n"
         # "No model selected yet"
-        "\n\n[bold]/commands[/bold] [dim]to view all commands"
+        "\n\n[bold]/commands[/bold] or [bold]/help[/bold] [dim]to view all commands"
         "\n[bold]/exit[/bold] [dim]to leave interface"
 
     )
@@ -313,4 +329,68 @@ def print_info(lines: list[str]) -> None:
     console.print()
     for line in lines:
         console.print(f"   [{COLORS['accent']}]{line}[/{COLORS['accent']}]")
+    console.print()
+
+
+def print_history(context: list[dict]) -> None:
+    """Replay the conversation history into the terminal."""
+    from rich.markdown import Markdown
+    from rich.panel import Panel
+
+    for msg in context:
+        role = msg.get("role")
+
+        if role == "user":
+            content = msg.get("content") or ""
+            for line in content.splitlines():
+                console.print(f"> {line}".ljust(console.width), style=COLORS["user_input"])
+            console.print()
+            console.print(Rule(style="dim"))
+
+        elif role == "assistant":
+            content = msg.get("content") or ""
+            if content:
+                parts = re.split(r"(```[\s\S]*?```)", content)
+                for part in parts:
+                    if not part.strip():
+                        continue
+                    if part.startswith("```"):
+                        console.print(Padding(Markdown(part, code_theme="monokai"), CODE_INDENT))
+                    else:
+                        console.print(Padding(
+                            Panel(
+                                Markdown(part.strip(), code_theme="monokai"),
+                                box=LEFT_ONLY,
+                                border_style=COLORS["accent"],
+                                expand=False,
+                                padding=(0, 1),
+                            ),
+                            INDENT,
+                        ))
+
+            tool_calls = msg.get("tool_calls")
+            if tool_calls:
+                for tc in tool_calls:
+                    name = tc["function"]["name"]
+                    args = tc["function"]["arguments"]
+                    try:
+                        parsed = json.loads(args)
+                        flat = ", ".join(f"{k}={v}" for k, v in parsed.items())
+                    except (json.JSONDecodeError, TypeError):
+                        flat = args
+                    if len(flat) > console.width - 14:
+                        flat = flat[:console.width - 18] + "..."
+                    console.print(f"   [{COLORS['accent']}]{name}:[/{COLORS['accent']}] {flat}")
+                console.print()
+                console.print()
+
+        elif role == "tool":
+            content = msg.get("content") or ""
+            if content:
+                if len(content) > 200:
+                    content = content[:200] + "..."
+                console.print(f"   tool result: {content}", style="dim")
+
+    console.print(Rule(style="bold green"))
+    console.print(f"   [bold]End of history \u2014 {len(context)} messages loaded[/bold]")
     console.print()

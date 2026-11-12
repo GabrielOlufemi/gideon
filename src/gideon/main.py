@@ -13,7 +13,7 @@ from gideon.config import get_agent_name, is_configured, load_config, save_confi
 from gideon.onboarding import run_onboarding
 from gideon.models import pick_model
 
-from gideon.display import print_welcome
+from gideon.display import print_welcome, print_history
 
 from gideon.tools_config import TOOLS, DESTRUCTIVE_TOOLS
 from gideon.display import VERSION
@@ -63,6 +63,8 @@ def main() -> None:
         context = load_session(session_path)
         metadata = get_session_metadata(session_path)
         auto_mode = metadata.get("auto_mode", False)
+        if context:
+            print_history(context)
     else:
         context = []
         auto_mode = questionary.confirm("Enable auto mode?", default=False).ask()

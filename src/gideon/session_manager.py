@@ -17,11 +17,11 @@ def _timestamp_from_filename(file: Path) -> datetime | None:
         return None
 
 
-def _extract_summary(context: list[dict], max_len: int = 80) -> str:
+def _extract_summary(context: list[dict], max_len: int = 50) -> str:
     """Derive a summary from the first user message in the conversation."""
     for msg in context:
         if msg.get("role") == "user" and isinstance(msg.get("content"), str) and msg["content"].strip():
-            text = msg["content"].strip()
+            text = msg["content"].strip().replace("\n", " ")
             if len(text) <= max_len:
                 return text
             return text[:max_len].rstrip() + "..."
@@ -95,8 +95,13 @@ def new_session_path(session_dir: Path) -> Path:
     return session_dir / f"session_{timestamp}.json"
 
 
-def save_session(path: Path, context: list[dict], model: str, auto_mode: bool = False) -> None:
-    """Save session with metadata. Preserves existing created time on re-save."""
+def save_session(path: Path, context: list[dict], model: str, auto_mode: bool = False,
+                 file_snapshots: list[dict] | None = None) -> None:
+    """Save session with metadata. Preserves existing created time on re-save.
+
+    file_snapshots: a list of {turn_index, path, content} entries recording file
+                    states before they were modified by the model. Used for /rewind.
+    """
 
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     summary = _extract_summary(context)
@@ -120,6 +125,9 @@ def save_session(path: Path, context: list[dict], model: str, auto_mode: bool = 
         "summary": summary,
         "messages": context,
     }
+
+    if file_snapshots:
+        data["file_snapshots"] = file_snapshots
 
     try:
         with open(path, "w") as f:
