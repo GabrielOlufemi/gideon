@@ -58,7 +58,7 @@ def _random_status() -> str:
 
 
 TERMINATE_KEYWORDS = ["quit", "exit", "leave"]
-CONSOLE_COMMANDS = ["/commands", "/help", "/config", "/sessions", "/restore", "/delete", "/auto", "/rewind"]
+CONSOLE_COMMANDS = ["/commands", "/help", "/config", "/sessions", "/restore", "/delete", "/mode", "/rewind"]
 
 
 def _line_count(text: str) -> int:
@@ -70,14 +70,14 @@ def _line_count(text: str) -> int:
 
 COMMANDS_TEXT = """\
   [bold]/commands[/bold]                  View all commands
-  [bold]/help[/bold]                     Alias for /commands
-  [bold]/config[/bold]                  Open config menu
+  [bold]/help[/bold]                      Alias for /commands
+  [bold]/config[/bold]                    Open config menu
   [bold]/sessions[/bold]                  List all sessions for this project
-  [bold]/restore[/bold] [dim]<number>[/dim]         Restore a previous session
-  [bold]/delete[/bold] [dim]<number>[/dim]          Delete a session
-  [bold]/rewind[/bold]                 Rewind the conversation to a previous turn
-  [bold]/auto[/bold]                    Toggle auto mode on/off
-  [bold]quit[/bold], [bold]exit[/bold], [bold]leave[/bold]         End the session"""
+  [bold]/restore[/bold] [dim]<number>[/dim]          Restore a previous session
+  [bold]/delete[/bold] [dim]<number>[/dim]           Delete a session
+  [bold]/rewind[/bold]                    Rewind conversation and codebase to a previous turn
+  [bold]/mode[/bold]                      Select auto or manual mode
+  [bold]quit[/bold], [bold]exit[/bold], [bold]leave[/bold]          End the session"""
 
 # tool exec logic
 # Accumulates file snapshots across the current user turn.
@@ -321,7 +321,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mo
     ])
 
     def _make_toolbar() -> FormattedText:
-        left = f"  {newline_hint} for newline     esc to cancel"
+        left = f"  {newline_hint} for newline     ctrl+c to cancel"
         right = "/commands"
         padding = max(2, console.width - len(left) - len(right))
         return FormattedText([
@@ -359,7 +359,7 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mo
         line_count = len(user_input.splitlines())
         if line_count > 1:
             console.print(f"   [Pasted +{line_count} lines]", style=COLORS["tool_detail"])
-        console.print("   Esc to interrupt", style=COLORS["tool_detail"])
+        console.print("   Ctrl+C to interrupt", style=COLORS["tool_detail"])
 
         # check if input is a console command
         cmd_parts = user_input.strip().split()
@@ -448,12 +448,22 @@ def run_loop(context: list[dict], session_path: Path, session_dir: Path, auto_mo
                 print_success(f"Deleted session from {target['display']}.")
                 continue
 
-            if cmd == "/auto":
-                auto_mode = not auto_mode
-                if auto_mode:
-                    always_allowed = list(DESTRUCTIVE_TOOLS)
-                else:
-                    always_allowed = []
+            if cmd == "/mode":
+                current = "auto" if auto_mode else "manual"
+                choices = [
+                    questionary.Choice(title=f"Auto mode{' \u2713' if auto_mode else ''}", value=True),
+                    questionary.Choice(title=f"Manual mode{' \u2713' if not auto_mode else ''}", value=False),
+                ]
+                try:
+                    picked = select_choice(f"Select mode (currently: {current}):", choices)
+                except PickerCancelled:
+                    print_error("Cancelled.")
+                    continue
+                if picked == auto_mode:
+                    print_info(["No change — already in that mode."])
+                    continue
+                auto_mode = picked
+                always_allowed = list(DESTRUCTIVE_TOOLS) if auto_mode else []
                 mode_label = "auto" if auto_mode else "manual"
                 print_success(f"Switched to {mode_label} mode.")
                 continue

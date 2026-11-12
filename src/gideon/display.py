@@ -16,7 +16,7 @@ from rich.live import Live
 from rich import box
 
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 
 
 COLORS = {
@@ -77,14 +77,9 @@ def print_context_bar(prompt_tokens: int, completion_tokens: int, context_length
 
     bar_text = f"[{style}]{bar}  [{pct}%]  {total:,}/{context_length:,} tokens[/{style}]"
 
-    if auto_mode:
-        mode_text = Text()
-        mode_text.append("mode \u00b7 ", style="bold")
-        mode_text.append("/auto", style="bold")
-    else:
-        mode_text = Text()
-        mode_text.append("mode \u00b7 ", style="bold")
-        mode_text.append("/manual", style="bold")
+    mode_text = Text()
+    mode_text.append("mode \u00b7 ", style="bold")
+    mode_text.append("auto" if auto_mode else "manual", style="bold")
 
     # Right-align mode tag within terminal width
     full = Text.from_markup(bar_text)
@@ -399,7 +394,10 @@ def print_history(context: list[dict]) -> None:
             if content:
                 if len(content) > 200:
                     content = content[:200] + "..."
-                console.print(f"   tool result: {content}", style="dim")
+                console.print(Padding(
+                    Text(f"tool result: {content}", style="dim"),
+                    (0, 0, 0, 3),
+                ))
 
     console.print(Rule(style="bold green"))
     console.print(f"   [bold]End of history \u2014 {len(context)} messages loaded[/bold]")
